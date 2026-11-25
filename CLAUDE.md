@@ -47,3 +47,10 @@ There is no test suite or linter; `npm run check` is the verification step.
 
 ### Share format (`src/lib/share.ts`)
 JSON exchange format `SharedData` (`v: 1`) with images as base64 data URLs, converted to Blobs on import. It must stay compatible with the original prototype's format (the README mentions `MainList_v1.html`, which is no longer in the repo).
+
+## Project skills (`.claude/skills/`)
+Load the matching skill before working on that part of the stack:
+- `svelte5-runes` — components and `.svelte.ts` reactive state.
+- `dexie-storage` — IndexedDB schema, saves, Blob images, `SharedData` format.
+- `worker-api` — `/api` routes, external services, secrets, Cloudflare deployment.
+- `typescript-conventions` — TS rules, code organisation, language, done checklist.
