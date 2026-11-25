@@ -123,6 +123,26 @@ kbd { font: 12px Rubik, sans-serif; border: 1px solid var(--line); border-bottom
 .loading, .missing { text-align: center; color: var(--mute); padding: 48px 16px; }
 .missing { display: grid; justify-items: center; gap: 12px; }
 
+/* ---------- import musique ---------- */
+.small.err { color: var(--danger); }
+.chk { display: grid; gap: 6px; }
+.card .chk label { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--ink); font-size: 15px; cursor: pointer; }
+.chk input, .mlist input { width: 18px; height: 18px; flex: none; accent-color: var(--acc); }
+.mhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 14px; }
+.mhead .small { margin: 0; }
+.btn.sm { min-height: 32px; font-size: 13px; padding: 0 10px; }
+.mlist { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 4px; }
+.mlist.albums { max-height: 42vh; overflow: auto; border: 1px solid var(--line); border-radius: 10px; padding: 4px; }
+.card .mrow-b { display: flex; align-items: center; gap: 10px; width: 100%; margin: 0; padding: 6px 8px; border: 0; border-radius: 8px; background: transparent; color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+.mrow-b:hover { background: var(--panel); }
+.mrow-b:focus-visible { outline: 3px solid var(--acc); outline-offset: -1px; }
+.mrow-b .av, .mrow-b .cov { width: 44px; height: 44px; flex: none; object-fit: cover; background: var(--zone); }
+.mrow-b .av { border-radius: 50%; }
+.mrow-b .cov { border-radius: 4px; }
+.mtxt { display: grid; line-height: 1.25; }
+.mtxt b { font-weight: 600; overflow-wrap: anywhere; }
+.mtxt small { color: var(--mute); font-size: 13px; }
+
 /* ---------- bibliothèque ---------- */
 .lib-h { font: 800 clamp(24px, 3.4vw, 34px)/1.1 Rubik, sans-serif; letter-spacing: -0.02em; margin: 8px 0 18px; }
 .lists { list-style: none; margin: 0 0 32px; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 14px; }

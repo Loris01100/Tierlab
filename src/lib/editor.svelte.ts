@@ -204,6 +204,31 @@ export class Editor {
     return added;
   }
 
+  /**
+   * Ajoute des vignettes venant d'une source externe (API) : image + légende, ou texte seul sans image.
+   * Les images doivent déjà être réduites. Une seule étape d'annulation pour tout le lot.
+   */
+  addEntries(entries: { text: string; blob?: Blob }[], zone = POOL): string[] {
+    if (!entries.length) return [];
+    this.commit();
+    const target = this.listOf(zone);
+    const added: string[] = [];
+    for (const e of entries) {
+      const text = e.text.trim().slice(0, LIMITS.tileText);
+      let it: Item;
+      if (e.blob) it = { id: uid(), listId: this.id, type: 'img', text, blob: e.blob };
+      else {
+        const bg = TILE_COLORS[this.#rot++ % TILE_COLORS.length];
+        it = { id: uid(), listId: this.id, type: 'text', text: text || '?', bg, fg: fgFor(bg) };
+      }
+      this.#add(it);
+      target.push(it.id);
+      added.push(it.id);
+    }
+    this.touch();
+    return added;
+  }
+
   replaceItem(id: string, draft: ItemDraft) {
     const { list, index } = this.where(id);
     this.commit();

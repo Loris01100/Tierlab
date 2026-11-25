@@ -15,4 +15,4 @@ export const PRESETS: Record<string, Preset> = {
   tfm: { name: 'Top, moyen, flop', tiers: ['Top', 'Moyen', 'Flop'] },
 };
 
-export const LIMITS = { title: 80, tierName: 40, tileText: 80, tiers: 30, importImages: 200, history: 80 } as const;
+export const LIMITS = { title: 80, tierName: 40, tileText: 80, tiers: 30, importImages: 200, importApi: 400, history: 80 } as const;
