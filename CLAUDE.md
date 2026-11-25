@@ -17,6 +17,8 @@ npm run deploy   # build + wrangler deploy (needs `npx wrangler login` once)
 
 There is no test suite or linter; `npm run check` is the verification step.
 
+To see the site: `npm run dev` then open http://localhost:5173. In VS Code, F5 (`.vscode/launch.json`) starts the dev server and opens Edge/Chrome with the debugger; Ctrl+Shift+B runs the `dev` task alone. Claude Code previews use `.claude/launch.json` (`tierlab-dev` on 5173, `tierlab-preview` on 4173 — run `npm run build` first).
+
 ## Architecture
 
 ### Two TypeScript projects
@@ -54,3 +56,4 @@ Load the matching skill before working on that part of the stack:
 - `dexie-storage` — IndexedDB schema, saves, Blob images, `SharedData` format.
 - `worker-api` — `/api` routes, external services, secrets, Cloudflare deployment.
 - `typescript-conventions` — TS rules, code organisation, language, done checklist.
+- `ui-design` — visual design: `app.css` tokens, components, motion, mobile, light/dark.

@@ -1,0 +1,22 @@
+{
+  // F5 : démarre le serveur de dev puis ouvre le site dans Edge avec le débogueur attaché.
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Tierlab (dev)",
+      "type": "msedge",
+      "request": "launch",
+      "url": "http://localhost:5173",
+      "webRoot": "${workspaceFolder}",
+      "preLaunchTask": "dev"
+    },
+    {
+      "name": "Tierlab (dev, Chrome)",
+      "type": "chrome",
+      "request": "launch",
+      "url": "http://localhost:5173",
+      "webRoot": "${workspaceFolder}",
+      "preLaunchTask": "dev"
+    }
+  ]
+}
