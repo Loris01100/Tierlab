@@ -9,16 +9,25 @@ npm install      # dépendances
 npm run dev      # serveur de dev sur http://localhost:5173
 npm run check    # vérification des types (svelte-check)
 npm run build    # build de production dans dist/
+npm run cf:dev   # build puis Worker Cloudflare en local (wrangler dev)
+npm run deploy   # build puis déploiement sur https://mainlist.reesch.com
 ```
+
+## Déploiement (Cloudflare)
+
+Un Worker Cloudflare nommé `mainlist` (voir `wrangler.jsonc`) sert les fichiers de `dist/` et répond aux routes `/api/*`
+(`server/worker.ts`). Domaine personnalisé : `mainlist.reesch.com` (zone `reesch.com` sur le même compte Cloudflare).
+Première fois : `npx wrangler login`. Ensuite `npm run deploy` suffit.
 
 ## APIs externes
 
-Le navigateur n'appelle jamais les services externes directement : il passe par `/api/...`, servi par un
-middleware monté dans Vite (`npm run dev` et `npm run preview`). Si un service demande une clé, elle reste
+Le navigateur n'appelle jamais les services externes directement : il passe par `/api/...`. Le routeur
+(`server/api.ts`) utilise les objets web standards `Request` / `Response` : il tourne dans le Worker Cloudflare en production
+et, via un adaptateur Node (`server/node.ts`), dans Vite (`npm run dev` et `npm run preview`). Si un service demande une clé, elle reste
 côté serveur : la mettre dans `.env.local` (voir `.env.example`, ignoré par git), sans préfixe `VITE_`.
 
 Ajouter un service : écrire un module dans `server/` qui exporte des `Route[]` (voir `server/deezer.ts`),
-l'ajouter dans `vite.config.ts`, puis l'appeler depuis le front avec `apiGet()` (`src/lib/api.ts`).
+l'ajouter dans `server/routes.ts`, puis l'appeler depuis le front avec `apiGet()` (`src/lib/api.ts`).
 
 ### Musique (Deezer)
 
@@ -30,13 +39,10 @@ Quota : 50 requêtes par 5 secondes, géré par le serveur (attente et nouvel es
 Routes : `GET /api/music/artists?q=`, `/api/music/artists/:id/albums?groups=album,single`,
 `/api/music/albums/:id/tracks`, `/api/music/image?url=` (relais des pochettes, limité aux domaines Deezer).
 
-`npm run build` produit un site statique sans `/api` : pour l'héberger, il faudra porter `server/` vers une fonction
-serverless (Vercel, Netlify, Cloudflare…) ou un petit serveur Node.
-
 ## Structure
 
 ```
-server/                    API côté serveur : routeur /api, musique (Deezer)
+server/                    API côté serveur : routeur /api, musique (Deezer), Worker Cloudflare, adaptateur Vite
 shared/                    types partagés serveur / navigateur
 src/
   main.ts, App.svelte      point d'entrée, routage #/ et #/list/<id>

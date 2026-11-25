@@ -1,11 +1,11 @@
 import { defineConfig, loadEnv, type Plugin } from 'vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
-import { createApi, type Env } from './server/api';
-import { musicRoutes } from './server/deezer';
+import type { Env } from './server/api';
+import { nodeApi } from './server/node';
 
 /** Monte les routes /api sur le serveur de dev et sur `vite preview`. Les secrets ne quittent pas le serveur. */
 function api(env: Env): Plugin {
-  const handler = createApi([...musicRoutes], env);
+  const handler = nodeApi(env);
   return {
     name: 'tierlab-api',
     configureServer: (server) => void server.middlewares.use('/api', handler),

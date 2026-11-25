@@ -1,5 +1,3 @@
-import { Readable } from 'node:stream';
-import type { ReadableStream as WebStream } from 'node:stream/web';
 import type { AlbumGroup, AlbumInfo, ArtistHit, TrackInfo } from '../shared/music';
 import { HttpError, type Route } from './api';
 
@@ -166,7 +164,7 @@ export const musicRoutes: Route[] = [
     // Relais des pochettes : même origine pour le navigateur (pas de souci CORS pour le canvas).
     method: 'GET',
     path: '/music/image',
-    async handler({ query, res }) {
+    async handler({ query }) {
       let u: URL;
       try {
         u = new URL(query.get('url') ?? '');
@@ -174,17 +172,15 @@ export const musicRoutes: Route[] = [
         throw new HttpError(400, 'URL d’image invalide');
       }
       if (u.protocol !== 'https:' || !u.hostname.endsWith('.dzcdn.net')) throw new HttpError(400, 'Seules les images Deezer sont relayées');
-      const r = await fetch(u, { redirect: 'error' }).catch(() => null);
+      // redirect: 'manual' (les Workers refusent 'error') : une redirection n'est pas « ok », donc refusée plus bas.
+      const r = await fetch(u, { redirect: 'manual' }).catch(() => null);
       const type = r?.headers.get('Content-Type') ?? '';
       if (!r?.ok || !r.body || !type.startsWith('image/')) throw new HttpError(502, 'Image indisponible');
       if (Number(r.headers.get('Content-Length')) > 8_000_000) throw new HttpError(502, 'Image trop lourde');
-      res.statusCode = 200;
-      res.setHeader('Content-Type', type);
-      res.setHeader('Cache-Control', 'public, max-age=86400');
-      Readable.fromWeb(r.body as WebStream)
-        .on('error', () => res.destroy())
-        .pipe(res);
-      return undefined;
+      return new Response(r.body, {
+        status: 200,
+        headers: { 'Content-Type': type, 'Cache-Control': 'public, max-age=86400' },
+      });
     },
   },
 ];
