@@ -1,0 +1,49 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+Tierlab is a tier-list maker: Svelte 5 (runes) + TypeScript SPA, data stored locally in IndexedDB (Dexie), plus a small `/api` backend deployed as a Cloudflare Worker (`mainlist`, custom domain `mainlist.reesch.com`). Code comments, UI strings and the README are in French — keep new ones in French.
+
+## Commands
+
+```bash
+npm run dev      # Vite dev server on http://localhost:5173 (also serves /api)
+npm run check    # svelte-check on src/ + shared/, then tsc on server/ + vite.config.ts (tsconfig.node.json)
+npm run build    # production build into dist/
+npm run preview  # serve dist/ with /api
+npm run cf:dev   # build, then run the real Worker locally (wrangler dev)
+npm run deploy   # build + wrangler deploy (needs `npx wrangler login` once)
+```
+
+There is no test suite or linter; `npm run check` is the verification step.
+
+## Architecture
+
+### Two TypeScript projects
+- `tsconfig.json`: browser code (`src/`, `shared/`), DOM libs.
+- `tsconfig.node.json`: server code (`server/`, `vite.config.ts`), Node types, no DOM.
+- `shared/` holds types used by both sides (e.g. `shared/music.ts` for `/api/music` payloads) and must stay environment-neutral.
+
+### `/api` backend — one router, two hosts
+- `server/api.ts` is a tiny router built on web-standard `Request`/`Response` (`Route` = method + path with `:params` + handler). Handlers return a JSON-serializable value or a full `Response` (e.g. image proxy); throw `HttpError(status, msg)` for client-facing errors.
+- `server/routes.ts` aggregates all `Route[]` into `handleApi`.
+- Production: `server/worker.ts` (Cloudflare). `wrangler.jsonc` routes only `/api/*` through the Worker; everything else is static from `dist/` with SPA fallback.
+- Dev/preview: `vite.config.ts` mounts the same handler via the Node adapter `server/node.ts`.
+- The browser never calls external services directly. Secrets go in `.env.local` **without** the `VITE_` prefix (loaded server-side by `vite.config.ts`; on Cloudflare, Worker env vars).
+- Adding a service: new module in `server/` exporting `Route[]` (model: `server/deezer.ts`), register it in `server/routes.ts`, call it from the front with `apiGet()` (`src/lib/api.ts`).
+- `server/deezer.ts`: public Deezer API (no key), 50 req / 5 s quota handled server-side with wait-and-retry; the image proxy `/api/music/image?url=` is restricted to Deezer domains.
+
+### Front end
+- Hash routing (`src/lib/router.svelte.ts`): `#/` → `Library.svelte`, `#/list/<id>` → `EditorPage.svelte` (loads from IndexedDB) → `Editor.svelte`.
+- `src/lib/editor.svelte.ts` — the `Editor` class is the reactive state of an open list (`$state` fields). All mutations go through its methods, which push an undo snapshot (JSON of `title`/`tiers`/`pool`) and call `touch()` → debounced (400 ms) save to IndexedDB. Drag state (`dragId`, `overZone`, `overTrash`) also lives here and is read by components. The unranked pool zone id is `POOL`.
+- `src/lib/drag.ts`: custom Pointer Events drag-and-drop (mouse + touch), no library.
+- Single global stylesheet `src/app.css`.
+
+### Storage model (`src/lib/db.ts`)
+- `lists` table: list structure only (title, tiers, item-id ordering, pool) — light, what the library reads.
+- `items` table: tiles indexed by `listId`; images are `Blob`s (WebP, shrunk to 320 px by `src/lib/images.ts`), never base64.
+- **Items are immutable**: editing a tile creates a new item with a new id (this keeps undo trivial). Orphaned items are cleaned up when a list is opened.
+- Schema changes: add `this.version(2).stores(...).upgrade(...)` in `db.ts`; never modify version 1.
+
+### Share format (`src/lib/share.ts`)
+JSON exchange format `SharedData` (`v: 1`) with images as base64 data URLs, converted to Blobs on import. It must stay compatible with the original prototype's format (the README mentions `MainList_v1.html`, which is no longer in the repo).
