@@ -1,0 +1,122 @@
+import type { Item, Tier } from './types';
+
+/** Rendu de la tier liste dans un canvas PNG (indépendant du DOM). */
+
+function wrap(x: CanvasRenderingContext2D, txt: string, mw: number): string[] {
+  const out: string[] = [];
+  for (const para of String(txt).split('\n')) {
+    let line = '';
+    for (let w of para.split(/\s+/).filter(Boolean)) {
+      while (x.measureText(w).width > mw && w.length > 1) {
+        let k = w.length;
+        while (k > 1 && x.measureText(w.slice(0, k)).width > mw) k--;
+        if (line) {
+          out.push(line);
+          line = '';
+        }
+        out.push(w.slice(0, k));
+        w = w.slice(k);
+      }
+      const test = line ? line + ' ' + w : w;
+      if (line && x.measureText(test).width > mw) {
+        out.push(line);
+        line = w;
+      } else line = test;
+    }
+    if (line) out.push(line);
+  }
+  return out.length ? out : [''];
+}
+
+function fitText(
+  x: CanvasRenderingContext2D, txt: string, cx: number, cy: number,
+  mw: number, mh: number, col: string, max: number, wt: number,
+) {
+  for (let s = max; s >= 10; s -= 2) {
+    x.font = `${wt} ${s}px Rubik, sans-serif`;
+    const lines = wrap(x, txt, mw);
+    const lh = s * 1.12;
+    const wordsFit = String(txt).split(/\s+/).every((w) => x.measureText(w).width <= mw);
+    if ((lines.length * lh <= mh && wordsFit) || s <= 11) {
+      x.fillStyle = col;
+      x.textAlign = 'center';
+      x.textBaseline = 'middle';
+      lines.forEach((l, k) => x.fillText(l, cx, cy + (k - (lines.length - 1) / 2) * lh));
+      x.textAlign = 'left';
+      return;
+    }
+  }
+}
+
+async function drawTile(x: CanvasRenderingContext2D, it: Item | undefined, tx: number, ty: number, s: number) {
+  if (!it) return;
+  const cp = it.type === 'img' && it.text ? 40 : 0;
+  x.save();
+  x.beginPath();
+  if (x.roundRect) x.roundRect(tx, ty, s, s + cp, 7);
+  else x.rect(tx, ty, s, s + cp);
+  x.clip();
+  if (it.type === 'img') {
+    if (it.blob) {
+      try {
+        const im = await createImageBitmap(it.blob);
+        const k = Math.max(s / im.width, s / im.height);
+        const w = im.width * k;
+        const h = im.height * k;
+        x.drawImage(im, tx + (s - w) / 2, ty + (s - h) / 2, w, h);
+        im.close();
+      } catch {
+        /* image illisible : case vide */
+      }
+    }
+    if (cp) {
+      x.fillStyle = '#ffffff';
+      x.fillRect(tx, ty + s, s, cp);
+      fitText(x, it.text, tx + s / 2, ty + s + cp / 2, s - 8, cp - 6, '#17181c', 15, 600);
+    }
+  } else {
+    x.fillStyle = it.bg ?? '#3d5afe';
+    x.fillRect(tx, ty, s, s);
+    fitText(x, it.text, tx + s / 2, ty + s / 2, s - 12, s - 12, it.fg ?? '#ffffff', 26, 700);
+  }
+  x.restore();
+}
+
+export async function renderTierList(title: string, tiers: Tier[], items: Record<string, Item>): Promise<HTMLCanvasElement> {
+  try {
+    await document.fonts.ready;
+  } catch {
+    /* ignoré */
+  }
+  const s = 110, G = 5, LW = 150, COLS = 8, M = 3, TH = 84, CAP = 40;
+  const W = M * 2 + LW + G + COLS * (s + G);
+  const cellH = (t: Tier) => (t.items.some((i) => items[i]?.type === 'img' && items[i].text) ? s + CAP : s);
+  const hs = tiers.map((t) => Math.max(1, Math.ceil(t.items.length / COLS)) * (cellH(t) + G) + G);
+  const H = TH + hs.reduce((a, b) => a + b + M, 0) + M;
+
+  const c = document.createElement('canvas');
+  c.width = W;
+  c.height = H;
+  const x = c.getContext('2d')!;
+  x.fillStyle = '#16171b';
+  x.fillRect(0, 0, W, H);
+  x.fillStyle = '#ffffff';
+  x.font = '800 38px Rubik, sans-serif';
+  x.textBaseline = 'middle';
+  x.fillText(title || 'Tier liste', 18, TH / 2, W - 36);
+
+  let y = TH;
+  for (let i = 0; i < tiers.length; i++) {
+    const t = tiers[i];
+    const h = hs[i];
+    x.fillStyle = t.color;
+    x.fillRect(M, y, LW, h);
+    x.fillStyle = '#26282f';
+    x.fillRect(M + LW, y, W - M * 2 - LW, h);
+    fitText(x, t.name, M + LW / 2, y + h / 2, LW - 16, h - 16, '#17181c', 42, 800);
+    for (let j = 0; j < t.items.length; j++)
+      await drawTile(x, items[t.items[j]], M + LW + G + (j % COLS) * (s + G), y + G + Math.floor(j / COLS) * (cellH(t) + G), s);
+    y += h + M;
+  }
+  return c;
+}
