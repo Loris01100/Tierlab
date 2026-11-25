@@ -23,6 +23,8 @@ export interface Route {
   /** Chemin relatif à /api, avec paramètres : '/music/albums/:id/tracks'. */
   path: string;
   handler: Handler;
+  /** Cache-Control des réponses JSON réussies (défaut : no-store). Sans effet si le handler renvoie une Response. */
+  cache?: string;
 }
 
 /** Erreur transmise telle quelle au client, avec son code HTTP. */
@@ -46,39 +48,51 @@ function compile(path: string): { re: RegExp; keys: string[] } {
   return { re: new RegExp(`^${src}/?$`), keys };
 }
 
-export function json(status: number, body: unknown): Response {
+export function json(status: number, body: unknown, headers: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' },
+    headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...headers },
   });
 }
 
+/** decodeURIComponent lève une URIError sur un « % » mal formé : c'est une erreur du client, pas du serveur. */
+function decodeParam(v: string): string {
+  try {
+    return decodeURIComponent(v);
+  } catch {
+    throw new HttpError(400, 'Paramètre d’URL invalide');
+  }
+}
+
 /** Renvoie un gestionnaire Request → Response pour les URL sous /api, ou null pour les autres. */
-export function createApi(routes: Route[]) {
+export function createApi(routes: Route[]): (request: Request, env: Env) => Promise<Response | null> {
   const table = routes.map((r) => ({ ...r, ...compile(r.path) }));
 
-  return async (request: Request, env: Env): Promise<Response | null> => {
+  return async (request, env) => {
     const url = new URL(request.url);
     if (url.pathname !== API_PREFIX && !url.pathname.startsWith(`${API_PREFIX}/`)) return null;
     const path = url.pathname.slice(API_PREFIX.length) || '/';
 
-    let pathMatched = false;
+    const allowed: string[] = [];
     for (const r of table) {
       const m = r.re.exec(path);
       if (!m) continue;
-      pathMatched = true;
-      if (r.method !== request.method) continue;
+      if (r.method !== request.method) {
+        allowed.push(r.method);
+        continue;
+      }
       try {
-        const params = Object.fromEntries(r.keys.map((k, i) => [k, decodeURIComponent(m[i + 1])]));
+        const params = Object.fromEntries(r.keys.map((k, i) => [k, decodeParam(m[i + 1])]));
         const out = await r.handler({ params, query: url.searchParams, env, request });
-        return out instanceof Response ? out : json(200, out ?? null);
+        if (out instanceof Response) return out;
+        return json(200, out ?? null, r.cache ? { 'Cache-Control': r.cache } : {});
       } catch (e) {
         if (e instanceof HttpError) return json(e.status, { error: e.message });
         console.error('[api]', request.method, path, e);
         return json(500, { error: 'Erreur interne du serveur' });
       }
     }
-    if (pathMatched) return json(405, { error: 'Méthode non autorisée' });
+    if (allowed.length) return json(405, { error: 'Méthode non autorisée' }, { Allow: [...new Set(allowed)].join(', ') });
     return json(404, { error: 'Route inconnue' });
   };
 }

@@ -9,11 +9,17 @@ import { HttpError, type Route } from './api';
 
 const API = 'https://api.deezer.com';
 const ID_RE = /^\d{1,15}$/;
+/** Taille de page maximale acceptée par Deezer. */
+const PAGE = 100;
+/** Le catalogue change peu : le navigateur peut réutiliser les réponses (moins d'appels, moins de quota consommé). */
+const CACHE_SHORT = 'public, max-age=3600';
+const CACHE_LONG = 'public, max-age=86400';
 
 /* ---------- types bruts Deezer (champs utilisés seulement) ---------- */
 
 interface DzPage<T> {
   data: T[];
+  total?: number;
   next?: string;
 }
 interface DzError {
@@ -43,9 +49,10 @@ interface DzTrack {
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** GET sur l'API Deezer. Deezer renvoie ses erreurs avec un statut 200 et un objet { error }. */
-async function dz<T>(pathOrUrl: string): Promise<T> {
+async function dz<T>(pathOrUrl: string, params: Record<string, string | number> = {}): Promise<T> {
   const url = new URL(pathOrUrl, API);
   url.protocol = 'https:';
+  for (const [k, v] of Object.entries(params)) url.searchParams.set(k, String(v));
   if (url.host !== 'api.deezer.com') throw new HttpError(500, 'URL Deezer inattendue');
   for (let attempt = 0; ; attempt++) {
     let r: Response;
@@ -59,7 +66,9 @@ async function dz<T>(pathOrUrl: string): Promise<T> {
       continue;
     }
     if (!r.ok) throw new HttpError(502, `Deezer a répondu ${r.status}`);
-    const d = (await r.json()) as T | DzError;
+    const d = (await r.json().catch(() => {
+      throw new HttpError(502, 'Réponse Deezer illisible');
+    })) as T | DzError;
     if (d && typeof d === 'object' && 'error' in d) {
       const { code, message } = d.error;
       if (code === 4 && attempt < 3) {
@@ -75,15 +84,26 @@ async function dz<T>(pathOrUrl: string): Promise<T> {
   }
 }
 
-/** Lit toutes les pages d'une liste (100 éléments par page). */
-async function all<T>(path: string, max = 1000): Promise<T[]> {
-  const sep = path.includes('?') ? '&' : '?';
-  const out: T[] = [];
-  let next: string | undefined = `${path}${sep}limit=100`;
-  while (next && out.length < max) {
-    const p: DzPage<T> = await dz<DzPage<T>>(next);
-    out.push(...p.data);
-    next = p.next;
+/**
+ * Lit toutes les pages d'une liste, jusqu'à `max` éléments.
+ * La première page donne `total` : les suivantes sont alors demandées en parallèle (au plus max / PAGE requêtes,
+ * bien sous le quota) au lieu d'être enchaînées. Sans `total`, on suit les liens `next` un par un.
+ */
+async function all<T>(path: string, max: number): Promise<T[]> {
+  const first = await dz<DzPage<T>>(path, { limit: PAGE, index: 0 });
+  const out = [...first.data];
+  if (typeof first.total === 'number') {
+    const end = Math.min(first.total, max);
+    const rest: Promise<DzPage<T>>[] = [];
+    for (let index = PAGE; index < end; index += PAGE) rest.push(dz<DzPage<T>>(path, { limit: PAGE, index }));
+    for (const p of await Promise.all(rest)) out.push(...p.data);
+  } else {
+    let next = first.next;
+    while (next && out.length < max) {
+      const p: DzPage<T> = await dz<DzPage<T>>(next);
+      out.push(...p.data);
+      next = p.next;
+    }
   }
   return out.slice(0, max);
 }
@@ -103,10 +123,11 @@ export const musicRoutes: Route[] = [
   {
     method: 'GET',
     path: '/music/artists',
+    cache: CACHE_SHORT,
     async handler({ query }) {
       const q = (query.get('q') ?? '').trim().slice(0, 100);
       if (!q) return { artists: [] };
-      const d = await dz<DzPage<DzArtist>>(`/search/artist?limit=10&q=${encodeURIComponent(q)}`);
+      const d = await dz<DzPage<DzArtist>>('/search/artist', { limit: 10, q });
       const artists: ArtistHit[] = d.data.map((a) => ({
         id: String(a.id),
         name: a.name,
@@ -119,6 +140,7 @@ export const musicRoutes: Route[] = [
   {
     method: 'GET',
     path: '/music/artists/:id/albums',
+    cache: CACHE_SHORT,
     async handler({ params, query }) {
       const id = checkId(params.id);
       const groups = new Set((query.get('groups') ?? 'album,single,compilation').split(',').filter((g) => GROUPS.has(g)));
@@ -148,6 +170,7 @@ export const musicRoutes: Route[] = [
   {
     method: 'GET',
     path: '/music/albums/:id/tracks',
+    cache: CACHE_LONG,
     async handler({ params }) {
       const id = checkId(params.id);
       const raw = await all<DzTrack>(`/album/${id}/tracks`, 300);
@@ -174,12 +197,18 @@ export const musicRoutes: Route[] = [
       if (u.protocol !== 'https:' || !u.hostname.endsWith('.dzcdn.net')) throw new HttpError(400, 'Seules les images Deezer sont relayées');
       // redirect: 'manual' (les Workers refusent 'error') : une redirection n'est pas « ok », donc refusée plus bas.
       const r = await fetch(u, { redirect: 'manual' }).catch(() => null);
-      const type = r?.headers.get('Content-Type') ?? '';
-      if (!r?.ok || !r.body || !type.startsWith('image/')) throw new HttpError(502, 'Image indisponible');
-      if (Number(r.headers.get('Content-Length')) > 8_000_000) throw new HttpError(502, 'Image trop lourde');
+      if (!r) throw new HttpError(502, 'Image indisponible');
+      const type = r.headers.get('Content-Type') ?? '';
+      const tooBig = Number(r.headers.get('Content-Length')) > 8_000_000;
+      if (!r.ok || !r.body || !type.startsWith('image/') || tooBig) {
+        // Libère la connexion sortante au lieu d'attendre que le corps non lu soit abandonné.
+        void r.body?.cancel().catch(() => {});
+        throw new HttpError(502, tooBig ? 'Image trop lourde' : 'Image indisponible');
+      }
+      // Les URL dzcdn contiennent l'empreinte de l'image : leur contenu ne change jamais.
       return new Response(r.body, {
         status: 200,
-        headers: { 'Content-Type': type, 'Cache-Control': 'public, max-age=86400' },
+        headers: { 'Content-Type': type, 'Cache-Control': 'public, max-age=2592000, immutable' },
       });
     },
   },
