@@ -168,6 +168,9 @@ kbd { font: 12px Rubik, sans-serif; border: 1px solid var(--line); border-bottom
 .lsearch svg { width: 18px; height: 18px; flex: none; }
 .lsearch input { flex: 1; border: 0; background: transparent; color: var(--ink); font-size: 16px; outline: none; }
 .lsearch input::-webkit-search-cancel-button { cursor: pointer; }
+/* brand et actions prennent la même largeur : la recherche reste au centre de la page */
+.lib-top > .brand, .lib-top > .acts { flex: 1 1 0; }
+.lib-top > .acts { justify-content: flex-end; }
 .ib.big { width: 44px; height: 44px; border-radius: 10px; }
 .ib.big svg { width: 20px; height: 20px; }
 .lib { display: grid; gap: 36px; padding-top: 28px; padding-bottom: 48px; }

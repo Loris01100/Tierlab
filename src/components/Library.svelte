@@ -195,7 +195,7 @@
 
 <svelte:window onclick={onwindowclick} {onkeydown} />
 
-<header class="top">
+<header class="top lib-top">
   <div class="brand">
     <Logo />
   </div>
