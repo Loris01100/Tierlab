@@ -2,6 +2,7 @@
   import { onDestroy, onMount } from 'svelte';
   import type { CommunitySort } from '../../shared/community';
   import { CATALOGS, pendingCatalog, type CatalogTab } from '../lib/catalog';
+  import { published } from '../lib/community.svelte';
   import { PALETTE, PRESETS } from '../lib/constants';
   import { allLists, deleteList, loadList, previewItems, saveList } from '../lib/db';
   import { blobUrl, releaseUrls } from '../lib/images';
@@ -335,6 +336,9 @@
   {@const l = modal.del}
   <Modal title="Supprimer la liste ?" onclose={() => (modal = null)}>
     <p>« {l.title || 'Sans titre'} » et ses {plural(countTiles(l), 'vignette')} seront supprimées définitivement.</p>
+    {#if published[l.id]}
+      <p class="small">Sa copie publiée reste visible dans la communauté : vous pourrez toujours la retirer depuis sa page (« La vôtre »).</p>
+    {/if}
     <div class="foot">
       <button class="btn" onclick={() => (modal = null)}>Annuler</button>
       <button class="btn pri danger-bg" onclick={() => remove(l)}>Supprimer</button>

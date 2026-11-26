@@ -1,4 +1,4 @@
-import { applyOp, opItems, type ClientMsg, type LiveBoard, type LiveItem, type Op, type ServerMsg, type Structure } from '../../shared/live';
+import { applyOp, LIVE, opItems, type ClientMsg, type LiveBoard, type LiveItem, type Op, type ServerMsg, type Structure } from '../../shared/live';
 import { ApiError, apiGet, apiPost, mapLimit } from './api';
 import type { Editor } from './editor.svelte';
 import { toast } from './toast.svelte';
@@ -51,6 +51,9 @@ async function upload(room: string, id: string, blob: Blob): Promise<boolean> {
 /** Crée une salle à partir de la liste ouverte et y envoie ses images. Renvoie l'id de la salle. */
 export async function createRoom(ed: Editor, progress: (done: number, total: number) => void): Promise<string> {
   const items = ed.usedIds().map((id) => ed.items[id]).filter((i): i is Item => !!i);
+  // Le serveur ne garderait que les premières : les autres disparaîtraient de la liste à la connexion.
+  if (items.length > LIVE.items)
+    throw new ApiError(413, `Une liste partagée compte ${LIVE.items} vignettes au plus (celle-ci en a ${items.length})`);
   const s = ed.structure();
   const board: LiveBoard = { ...s, items: items.map(toLive) };
   const { room } = await apiPost<{ room: string }>('/live', board);
@@ -84,10 +87,17 @@ export class LiveLink {
   #closed = false;
   #fetching = new Set<string>();
 
-  constructor(ed: Editor, room: string) {
+  /** restored : opérations restées en attente lors de la session précédente (TierList.livePending), renvoyées à la connexion. */
+  constructor(ed: Editor, room: string, restored: Op[] = []) {
     this.#ed = ed;
     this.room = room;
+    for (const op of restored) this.send(op);
     this.#connect();
+  }
+
+  /** Opérations pas encore acquittées, sauvegardées avec la liste pour survivre à une fermeture de l'onglet. */
+  pendingOps(): Op[] {
+    return this.#pending.map((p) => p.op);
   }
 
   /** Envoie une opération déjà appliquée localement. */
@@ -186,8 +196,17 @@ export class LiveLink {
         const i = this.#pending.findIndex((p) => p.n === msg.n);
         if (i < 0 || !this.#confirmed) return;
         const [p] = this.#pending.splice(i, 1);
-        // Notre opération rejoint l'état confirmé : l'état affiché ne change pas.
-        applyOp(this.#confirmed, p.op);
+        // L'état confirmé reçoit l'opération telle que le serveur l'a appliquée, pas la nôtre.
+        if (msg.op) applyOp(this.#confirmed, msg.op);
+        if (msg.op && JSON.stringify(msg.op) === JSON.stringify(p.op)) {
+          // Cas courant : l'état affiché ne change pas, seule la file sauvegardée (Editor.flush) raccourcit.
+          this.#ed.touch();
+          return;
+        }
+        // Opération refusée ou réduite : on se recale sur le serveur.
+        if (opItems(p.op).length > (msg.op ? opItems(msg.op).length : 0))
+          toast(`Liste partagée pleine (${LIVE.items} vignettes au plus) : ajout refusé`);
+        this.refresh();
         return;
       }
       case 'peers':

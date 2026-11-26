@@ -105,9 +105,8 @@ export class LiveRoom {
     }
     if (msg.t !== 'op' || typeof msg.n !== 'number') return;
     const op = cleanOp(msg.op);
-    // Une opération rejetée est quand même acquittée : le client la retire et se recale sur l'état du serveur.
-    if (op) this.#apply(op, ws);
-    send(ws, { t: 'ack', n: msg.n });
+    // Une opération rejetée est quand même acquittée (op: null) : le client la retire et se recale sur l'état du serveur.
+    send(ws, { t: 'ack', n: msg.n, op: op && this.#apply(op, ws) });
   }
 
   webSocketClose(ws: Socket, code: number, reason: string): void {
@@ -125,18 +124,20 @@ export class LiveRoom {
 
   /* ---------- interne ---------- */
 
-  #apply(op: Op, from: Socket) {
+  /** Applique et relaie une opération ; renvoie l'opération telle qu'appliquée, ou null si elle est refusée. */
+  #apply(op: Op, from: Socket): Op | null {
     const room = this.#room!;
     // Plafond de vignettes : les nouvelles au-delà sont ignorées.
     const left = LIVE.items - Object.keys(room.items).length;
     if (op.k === 'add') op.items = op.items.slice(0, Math.max(0, left));
-    else if (opItems(op).length && left <= 0) return;
+    else if (opItems(op).length && left <= 0) return null;
     for (const it of opItems(op)) room.items[it.id] ??= it;
     applyOp(room, op);
     this.#prune();
     this.#save();
     const out = JSON.stringify({ t: 'op', op } satisfies ServerMsg);
     for (const ws of this.#ctx.getWebSockets()) if (ws !== from) trySend(ws, out);
+    return op;
   }
 
   /** Oublie les vignettes que la structure n'utilise plus (leurs images restent, elles sont petites). */

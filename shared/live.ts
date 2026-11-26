@@ -86,8 +86,11 @@ export type ClientMsg = { t: 'op'; n: number; op: Op };
 export type ServerMsg =
   | { t: 'state'; board: LiveBoard }
   | { t: 'op'; op: Op }
-  /** L'opération n du client a été appliquée (ou rejetée) par le serveur. */
-  | { t: 'ack'; n: number }
+  /**
+   * L'opération n du client a été traitée par le serveur. op : l'opération telle qu'appliquée (validée, parfois réduite,
+   * ex. vignettes au-delà du plafond), ou null si elle a été rejetée. Le client l'applique à son état confirmé à la place de la sienne.
+   */
+  | { t: 'ack'; n: number; op: Op | null }
   | { t: 'peers'; n: number };
 
 /* ---------- application ---------- */

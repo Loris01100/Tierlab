@@ -1,4 +1,5 @@
 import type { Item, Tier } from './types';
+import { fgFor } from './utils';
 
 /** Rendu de la tier liste dans un canvas PNG (indépendant du DOM). */
 
@@ -113,7 +114,7 @@ export async function renderTierList(title: string, tiers: Tier[], items: Record
     x.fillRect(M, y, LW, h);
     x.fillStyle = '#26282f';
     x.fillRect(M + LW, y, W - M * 2 - LW, h);
-    fitText(x, t.name, M + LW / 2, y + h / 2, LW - 16, h - 16, '#17181c', 42, 800);
+    fitText(x, t.name, M + LW / 2, y + h / 2, LW - 16, h - 16, fgFor(t.color), 42, 800);
     for (let j = 0; j < t.items.length; j++)
       await drawTile(x, items[t.items[j]], M + LW + G + (j % COLS) * (s + G), y + G + Math.floor(j / COLS) * (cellH(t) + G), s);
     y += h + M;

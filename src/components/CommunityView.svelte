@@ -147,7 +147,7 @@
   </Modal>
 {:else if modal === 'remove'}
   <Modal title="Retirer de la communauté ?" onclose={() => (modal = null)}>
-    <p>Votre liste reste dans « Mes tier listes » : seule la copie publiée disparaît de la galerie.</p>
+    <p>Seule la copie publiée disparaît de la galerie : votre liste locale, si vous l’avez gardée, n’est pas touchée.</p>
     <div class="foot">
       <button class="btn" onclick={() => (modal = null)}>Annuler</button>
       <button class="btn pri danger-bg" onclick={remove}>Retirer</button>

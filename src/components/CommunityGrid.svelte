@@ -18,11 +18,15 @@
 
   const msg = (e: unknown): string => (e instanceof ApiError ? e.message : 'Galerie indisponible');
 
+  /** Requête affichée (recherche + tri) : « Voir plus » l'utilise pour être annulé si la recherche change entre-temps. */
+  let current = new AbortController();
+
   $effect(() => {
     const term = q.trim();
     const s = sort;
     void attempt;
     const ctrl = new AbortController();
+    current = ctrl;
     // Saisie : on attend une courte pause avant d'interroger le serveur.
     const t = setTimeout(
       async () => {
@@ -45,15 +49,17 @@
   });
 
   async function loadMore() {
+    const { signal } = current;
     loadingMore = true;
     try {
-      const r = await fetchPage(q.trim(), sort, page + 1);
+      const r = await fetchPage(q.trim(), sort, page + 1, signal);
+      if (signal.aborted) return;
       const known = new Set(cards?.map((c) => c.id));
       cards = [...(cards ?? []), ...r.lists.filter((c) => !known.has(c.id))];
       more = r.more;
       page++;
     } catch (e) {
-      error = msg(e);
+      if ((e as Error).name !== 'AbortError') error = msg(e);
     } finally {
       loadingMore = false;
     }

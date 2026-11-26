@@ -63,7 +63,7 @@ export class Editor {
     this.items = Object.fromEntries(items.map((i) => [i.id, i]));
     if (list.live) {
       this.#room = list.live;
-      this.live = new LiveLink(this, list.live);
+      this.live = new LiveLink(this, list.live, list.livePending);
     }
   }
 
@@ -394,6 +394,7 @@ export class Editor {
   async flush(): Promise<void> {
     clearTimeout(this.#timer);
     this.#timer = undefined;
+    const pending = this.live?.pendingOps() ?? [];
     const list: TierList = {
       id: this.id,
       title: this.title,
@@ -402,6 +403,8 @@ export class Editor {
       createdAt: this.createdAt,
       updatedAt: Date.now(),
       ...(this.#room ? { live: this.#room } : {}),
+      // Sans elles, la copie locale serait écrasée par l'état du serveur à la prochaine ouverture (modifications perdues).
+      ...(pending.length ? { livePending: $state.snapshot(pending) } : {}),
     };
     const dirty = [...this.#dirty].map((id) => this.items[id]).filter(Boolean);
     this.#dirty.clear();

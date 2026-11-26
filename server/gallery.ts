@@ -159,14 +159,15 @@ export class Gallery {
 
   async #publish(ctx: Ctx): Promise<Published> {
     const ip = await ipHash(ctx.request);
-    const now = Date.now();
-    const recent = Number(this.#rows('SELECT COUNT(*) AS n FROM list WHERE ip = ? AND created > ?', ip, now - 3_600_000)[0]?.n ?? 0);
-    if (recent >= COMMUNITY.perHour) throw new HttpError(429, 'Trop de publications depuis cette connexion : réessayez dans une heure');
     const data = clean(await readBody(ctx));
     const id = randomId(16);
     const token = randomId(32);
     const tokenHash = await sha256(token);
-    // Aucune attente à partir d'ici : les écritures sont validées ensemble.
+    // Aucune attente à partir d'ici : le Durable Object ne traite pas d'autre requête entre le comptage et l'insertion,
+    // sinon des publications envoyées en parallèle passeraient toutes le plafond.
+    const now = Date.now();
+    const recent = Number(this.#rows('SELECT COUNT(*) AS n FROM list WHERE ip = ? AND created > ?', ip, now - 3_600_000)[0]?.n ?? 0);
+    if (recent >= COMMUNITY.perHour) throw new HttpError(429, 'Trop de publications depuis cette connexion : réessayez dans une heure');
     this.#sql.exec(
       `INSERT INTO list (id, title, author, search, board, preview, tiles, tiers, created, updated, token, ip)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,

@@ -1,3 +1,5 @@
+import type { Op } from '../../shared/live';
+
 /** Une vignette. Les images sont stockées en Blob (binaire) dans IndexedDB, pas en base64. */
 export interface Item {
   id: string;
@@ -33,4 +35,6 @@ export interface TierList {
   updatedAt: number;
   /** Salle d'édition partagée à laquelle cette liste est reliée (copie locale synchronisée), absent sinon. */
   live?: string;
+  /** Opérations d'édition partagée pas encore confirmées par le serveur, renvoyées à la prochaine ouverture. */
+  livePending?: Op[];
 }
