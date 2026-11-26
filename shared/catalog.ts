@@ -75,6 +75,13 @@ export const CATALOGS = {
     credit: 'Open Library',
     lists: [],
   },
+  games: {
+    label: 'Jeux vidéo',
+    hint: 'Recherchez un jeu du Steam Store par son titre.',
+    placeholder: 'Ex. Hollow Knight',
+    credit: 'Steam',
+    lists: [],
+  },
 } as const satisfies Record<string, CatalogDef>;
 
 export type CatalogId = keyof typeof CATALOGS;

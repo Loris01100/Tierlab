@@ -6,6 +6,7 @@ import { deezerImages, musicRoutes } from './deezer';
 import { liveRoutes } from './live';
 import { imageRoutes } from './media';
 import { booksSource } from './openlibrary';
+import { steamSource } from './steam';
 import { pokemonSource } from './tyradex';
 
 /** Une implémentation par catégorie de shared/catalog.ts (le type impose qu'aucune ne manque). */
@@ -15,6 +16,7 @@ const catalogs: CatalogSources = {
   manga: mangaSource,
   characters: charactersSource,
   books: booksSource,
+  games: steamSource,
 };
 
 const imageHosts = [...deezerImages, ...Object.values(catalogs).flatMap((s) => s.images)];

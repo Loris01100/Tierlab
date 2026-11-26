@@ -43,7 +43,7 @@ Quota : 50 requêtes par 5 secondes, géré par le serveur (attente et nouvel es
 Routes : `GET /api/music/artists?q=`, `/api/music/artists/:id/albums?groups=album,single`,
 `/api/music/albums/:id/tracks`.
 
-### Catalogues (Pokémon, anime, manga, personnages, livres)
+### Catalogues (Pokémon, anime, manga, personnages, livres, jeux vidéo)
 
 Bouton **Catalogues** dans le dock : choix d'une catégorie (la musique y est un onglet à part, avec son propre parcours), recherche ou liste prédéfinie (génération Pokémon, top 100…),
 cases à cocher (la sélection est conservée d'une recherche et d'une catégorie à l'autre), puis import en vignettes image + nom.
@@ -54,6 +54,7 @@ Sources publiques, sans clé :
 | Pokémon | Tyradex (https://tyradex.app), noms en français | `server/tyradex.ts` |
 | Anime, manga, personnages | AniList, API GraphQL officielle (https://docs.anilist.co), 30 req/min | `server/anilist.ts` |
 | Livres | Open Library (https://openlibrary.org) | `server/openlibrary.ts` |
+| Jeux vidéo | Steam Store (`store.steampowered.com/api/storesearch`), API non officielle mais stable, images sur le CDN steamstatic | `server/steam.ts` |
 
 Toutes les catégories partagent le même contrat (`shared/catalog.ts`) et les mêmes routes :
 `GET /api/catalog/:source/search?q=` et `/api/catalog/:source/lists/:list`, qui renvoient `{ hits: CatalogHit[] }`.
