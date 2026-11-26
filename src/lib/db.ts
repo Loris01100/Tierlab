@@ -55,3 +55,10 @@ export function pruneItems(listId: string, keep: Set<string>): Promise<number> {
     .filter((i) => !keep.has(i.id))
     .delete();
 }
+
+/** Premières vignettes de chaque rang, pour les aperçus de la bibliothèque (une seule lecture groupée). */
+export async function previewItems(lists: TierList[], perTier: number, tiers: number): Promise<Map<string, Item>> {
+  const ids = lists.flatMap((l) => l.tiers.slice(0, tiers).flatMap((t) => t.items.slice(0, perTier)));
+  const found = await db.items.bulkGet(ids);
+  return new Map(found.filter((i): i is Item => !!i).map((i) => [i.id, i]));
+}

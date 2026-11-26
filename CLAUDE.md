@@ -42,6 +42,8 @@ To see the site: `npm run dev` then open http://localhost:5173. In VS Code, F5 (
 - Hash routing (`src/lib/router.svelte.ts`): `#/` → `Library.svelte`, `#/list/<id>` → `EditorPage.svelte` (loads from IndexedDB) → `Editor.svelte`.
 - `src/lib/editor.svelte.ts` — the `Editor` class is the reactive state of an open list (`$state` fields). All mutations go through its methods, which push an undo snapshot (JSON of `title`/`tiers`/`pool`) and call `touch()` → debounced (400 ms) save to IndexedDB. Drag state (`dragId`, `overZone`, `overTrash`) also lives here and is read by components. The unranked pool zone id is `POOL`.
 - `src/lib/drag.ts`: custom Pointer Events drag-and-drop (mouse + touch), no library.
+- Library (`Library.svelte`): search, sort (pref `tierlab-sort`), card previews read the first tiles via `previewItems()` (`db.ts`), « Démarrer vite » shortcuts create a list and hand the catalog tab to the editor through `pendingCatalog` (`src/lib/catalog.ts`).
+- Theme: `src/lib/theme.svelte.ts` (auto / clair / sombre, pref `tierlab-theme`, sets `data-theme` on `<html>`), imported once in `main.ts`.
 - Single global stylesheet `src/app.css`.
 
 ### Storage model (`src/lib/db.ts`)

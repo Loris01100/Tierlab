@@ -42,3 +42,20 @@ export function setPref(key: string, value: unknown): void {
 }
 
 export const plural = (n: number, word: string): string => `${n} ${word}${n > 1 ? 's' : ''}`;
+
+/** Texte sans accents ni majuscules, pour les recherches tolérantes. */
+export const fold = (s: string): string => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+
+const rel = new Intl.RelativeTimeFormat('fr', { numeric: 'auto' });
+const day = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short' });
+const dayYear = new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' });
+
+/** Date relative courte : « à l’instant », « il y a 5 min », « hier », puis « 22 nov. » (année si différente). */
+export function relTime(t: number, now = Date.now()): string {
+  const s = Math.round((now - t) / 1000);
+  if (s < 60) return 'à l’instant';
+  if (s < 3600) return rel.format(-Math.floor(s / 60), 'minute');
+  if (s < 86400) return rel.format(-Math.floor(s / 3600), 'hour');
+  if (s < 7 * 86400) return rel.format(-Math.round(s / 86400), 'day');
+  return new Date(t).getFullYear() === new Date(now).getFullYear() ? day.format(t) : dayYear.format(t);
+}

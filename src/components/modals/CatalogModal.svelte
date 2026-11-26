@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { onDestroy } from 'svelte';
+  import { onDestroy, untrack } from 'svelte';
   import { fetchImage, imageUrl, mapLimit } from '../../lib/api';
-  import { CATALOGS, catalogList, searchCatalog, type CatalogHit, type CatalogId } from '../../lib/catalog';
+  import { CATALOGS, catalogList, searchCatalog, type CatalogHit, type CatalogId, type CatalogTab } from '../../lib/catalog';
   import { LIMITS } from '../../lib/constants';
   import type { Editor } from '../../lib/editor.svelte';
   import { shrink } from '../../lib/images';
@@ -10,13 +10,15 @@
   import Modal from '../Modal.svelte';
   import MusicPanel from './MusicPanel.svelte';
 
-  let { ed, onclose }: { ed: Editor; onclose: () => void } = $props();
+  /** initial : onglet ouvert d’emblée (raccourci depuis la bibliothèque). */
+  let { ed, onclose, initial = 'music' }: { ed: Editor; onclose: () => void; initial?: CatalogTab } = $props();
 
   const IDS = Object.keys(CATALOGS) as CatalogId[];
 
   /** La musique a son propre parcours (artiste → sorties) : elle n'est pas un catalogue générique. */
-  let tab = $state<CatalogId | 'music'>('music');
-  let source = $state<CatalogId>('pokemon');
+  const start = untrack(() => initial);
+  let tab = $state<CatalogTab>(start);
+  let source = $state<CatalogId>(start === 'music' ? 'pokemon' : start);
   const def = $derived(CATALOGS[source]);
   let q = $state('');
   /** Liste prédéfinie affichée (génération, top…), ou null pour la recherche. */

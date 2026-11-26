@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
   import { flip } from 'svelte/animate';
+  import { pendingCatalog, type CatalogTab } from '../lib/catalog';
   import { PARTY } from '../lib/constants';
   import { attachDrag } from '../lib/drag';
   import { POOL, type Editor } from '../lib/editor.svelte';
@@ -24,10 +25,16 @@
     | { kind: 'row'; id: string }
     | { kind: 'tile'; id: string }
     | { kind: 'share' }
-    | { kind: 'catalog' }
+    | { kind: 'catalog'; tab?: CatalogTab }
     | { kind: 'export'; blob: Blob }
     | null;
   let modal = $state<ModalState>(null);
+
+  // Liste créée depuis un raccourci « Démarrer vite » : on ouvre directement le bon catalogue.
+  if (pendingCatalog.tab) {
+    modal = { kind: 'catalog', tab: pendingCatalog.tab };
+    pendingCatalog.tab = null;
+  }
 
   /* ---------- taille des vignettes (préférence locale) ---------- */
   let size = $state(pref('tierlab-size', innerWidth < 600 ? 64 : 84));
@@ -361,7 +368,7 @@
     }}
   />
 {:else if modal?.kind === 'catalog'}
-  <CatalogModal {ed} onclose={() => (modal = null)} />
+  <CatalogModal {ed} initial={modal.tab} onclose={() => (modal = null)} />
 {:else if modal?.kind === 'share'}
   <ShareModal {ed} onclose={() => (modal = null)} />
 {:else if modal?.kind === 'export'}

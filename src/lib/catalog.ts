@@ -10,3 +10,12 @@ export const searchCatalog = async (source: CatalogId, q: string, signal?: Abort
 
 export const catalogList = async (source: CatalogId, list: string, signal?: AbortSignal): Promise<CatalogHit[]> =>
   (await apiGet<CatalogHits>(`/catalog/${source}/lists/${encodeURIComponent(list)}`, {}, signal)).hits;
+
+/** Onglet de la modale « Catalogues » : un catalogue générique ou la musique. */
+export type CatalogTab = CatalogId | 'music';
+
+/**
+ * Onglet à ouvrir dès l’arrivée dans l’éditeur (raccourcis « Démarrer vite » de la bibliothèque).
+ * Lu puis remis à null par l’éditeur ; non réactif, il ne sert qu’au passage d’une page à l’autre.
+ */
+export const pendingCatalog: { tab: CatalogTab | null } = { tab: null };
