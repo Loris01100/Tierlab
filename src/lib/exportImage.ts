@@ -49,7 +49,20 @@ function fitText(
   }
 }
 
-async function drawTile(x: CanvasRenderingContext2D, it: Item | undefined, tx: number, ty: number, s: number) {
+/** Décode l'image d'une vignette ; null si elle est absente ou illisible (case vide). */
+async function decode(it: Item | undefined): Promise<ImageBitmap | null> {
+  if (it?.type !== 'img' || !it.blob) return null;
+  try {
+    return await createImageBitmap(it.blob);
+  } catch {
+    return null;
+  }
+}
+
+/** Vignettes décodées en parallèle par lots : plus rapide qu'une à une, sans garder toutes les images en mémoire. */
+const BATCH = 16;
+
+function drawTile(x: CanvasRenderingContext2D, it: Item | undefined, im: ImageBitmap | null, tx: number, ty: number, s: number) {
   if (!it) return;
   const cp = it.type === 'img' && it.text ? 40 : 0;
   x.save();
@@ -58,17 +71,11 @@ async function drawTile(x: CanvasRenderingContext2D, it: Item | undefined, tx: n
   else x.rect(tx, ty, s, s + cp);
   x.clip();
   if (it.type === 'img') {
-    if (it.blob) {
-      try {
-        const im = await createImageBitmap(it.blob);
-        const k = Math.max(s / im.width, s / im.height);
-        const w = im.width * k;
-        const h = im.height * k;
-        x.drawImage(im, tx + (s - w) / 2, ty + (s - h) / 2, w, h);
-        im.close();
-      } catch {
-        /* image illisible : case vide */
-      }
+    if (im) {
+      const k = Math.max(s / im.width, s / im.height);
+      const w = im.width * k;
+      const h = im.height * k;
+      x.drawImage(im, tx + (s - w) / 2, ty + (s - h) / 2, w, h);
     }
     if (cp) {
       x.fillStyle = '#ffffff';
@@ -115,8 +122,15 @@ export async function renderTierList(title: string, tiers: Tier[], items: Record
     x.fillStyle = '#26282f';
     x.fillRect(M + LW, y, W - M * 2 - LW, h);
     fitText(x, t.name, M + LW / 2, y + h / 2, LW - 16, h - 16, fgFor(t.color), 42, 800);
-    for (let j = 0; j < t.items.length; j++)
-      await drawTile(x, items[t.items[j]], M + LW + G + (j % COLS) * (s + G), y + G + Math.floor(j / COLS) * (cellH(t) + G), s);
+    for (let b = 0; b < t.items.length; b += BATCH) {
+      const ids = t.items.slice(b, b + BATCH);
+      const ims = await Promise.all(ids.map((id) => decode(items[id])));
+      ids.forEach((id, k) => {
+        const j = b + k;
+        drawTile(x, items[id], ims[k], M + LW + G + (j % COLS) * (s + G), y + G + Math.floor(j / COLS) * (cellH(t) + G), s);
+        ims[k]?.close();
+      });
+    }
     y += h + M;
   }
   return c;

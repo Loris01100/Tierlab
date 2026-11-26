@@ -28,6 +28,13 @@ interface Pending {
 const imgPath = (room: string, id: string): string => `/live/${room}/img/${id}`;
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** Pause de frappe après laquelle une saisie continue (titre, nom de rang) est envoyée. */
+const HOLD_MS = 300;
+
+/** Deux opérations de saisie sur la même cible : la seconde remplace la première. */
+const sameTarget = (a: Op, b: Op): boolean =>
+  (a.k === 'title' && b.k === 'title') || (a.k === 'tierSet' && b.k === 'tierSet' && a.id === b.id);
+
 export const toLive = (it: Item): LiveItem =>
   it.type === 'img' ? { id: it.id, type: 'img', text: it.text } : { id: it.id, type: 'text', text: it.text, bg: it.bg };
 
@@ -86,6 +93,11 @@ export class LiveLink {
   #timer: ReturnType<typeof setTimeout> | undefined;
   #closed = false;
   #fetching = new Set<string>();
+  /** Images introuvables après plusieurs essais : plus redemandées avant la prochaine connexion (message state). */
+  #failed = new Set<string>();
+  /** Opération de saisie retenue (voir send). */
+  #held: Pending | null = null;
+  #holdTimer: ReturnType<typeof setTimeout> | undefined;
 
   /** restored : opérations restées en attente lors de la session précédente (TierList.livePending), renvoyées à la connexion. */
   constructor(ed: Editor, room: string, restored: Op[] = []) {
@@ -100,10 +112,26 @@ export class LiveLink {
     return this.#pending.map((p) => p.op);
   }
 
-  /** Envoie une opération déjà appliquée localement. */
-  send(op: Op): void {
+  /**
+   * Envoie une opération déjà appliquée localement.
+   * hold : saisie continue. L'opération reste en attente (elle compte déjà dans l'état affiché), chaque frappe la remplace,
+   * et elle part après HOLD_MS sans frappe, à release() ou dès qu'une autre opération suit (l'ordre est conservé).
+   * Le serveur réécrit tout l'état de la salle à chaque opération : on évite une écriture par caractère.
+   */
+  send(op: Op, hold = false): void {
+    const held = this.#held;
+    if (hold && held && held === this.#pending.at(-1) && sameTarget(held.op, op)) {
+      held.op = op;
+      this.#hold(held);
+      return;
+    }
+    this.release();
     const p: Pending = { n: ++this.#n, op, ready: false, sent: false };
     this.#pending.push(p);
+    if (hold) {
+      this.#hold(p);
+      return;
+    }
     const blobs = opItems(op)
       .map((i) => this.#ed.items[i.id])
       .filter((i): i is Item & { blob: Blob } => i?.type === 'img' && !!i.blob);
@@ -121,9 +149,26 @@ export class LiveLink {
     });
   }
 
+  /** Envoie tout de suite l'opération de saisie retenue, s'il y en a une. */
+  release(): void {
+    clearTimeout(this.#holdTimer);
+    const p = this.#held;
+    if (!p) return;
+    this.#held = null;
+    p.ready = true;
+    this.#flush();
+  }
+
+  #hold(p: Pending) {
+    this.#held = p;
+    clearTimeout(this.#holdTimer);
+    this.#holdTimer = setTimeout(() => this.release(), HOLD_MS);
+  }
+
   close(): void {
     this.#closed = true;
     clearTimeout(this.#timer);
+    clearTimeout(this.#holdTimer);
     this.#ws?.close();
     this.#ws = null;
   }
@@ -182,6 +227,8 @@ export class LiveLink {
         this.#confirmed = structure;
         this.status = 'online';
         this.#retry = 0;
+        // Nouvelle connexion : une image manquante a pu être envoyée depuis, on la redemande.
+        this.#failed.clear();
         for (const p of this.#pending) p.sent = false;
         this.refresh(items);
         this.#flush();
@@ -231,20 +278,22 @@ export class LiveLink {
   #fetchImages() {
     const missing = this.#ed
       .usedIds()
-      .filter((id) => this.#ed.items[id]?.type === 'img' && !this.#ed.items[id].blob && !this.#fetching.has(id));
+      .filter((id) => this.#ed.items[id]?.type === 'img' && !this.#ed.items[id].blob && !this.#fetching.has(id) && !this.#failed.has(id));
     if (!missing.length) return;
     for (const id of missing) this.#fetching.add(id);
     void mapLimit(missing, 4, async (id) => {
-      for (let i = 0; i < 3 && !this.#closed; i++) {
+      let ok = false;
+      for (let i = 0; i < 3 && !this.#closed && !ok; i++) {
         const blob = await fetch(`/api${imgPath(this.room, id)}`)
           .then((r) => (r.ok ? r.blob() : null))
           .catch(() => null);
         if (blob) {
           this.#ed.setBlob(id, blob);
-          break;
-        }
-        await wait(2000 * (i + 1));
+          ok = true;
+        } else await wait(2000 * (i + 1));
       }
+      // Sans ce souvenir, chaque opération reçue relancerait les 3 essais pour chaque image manquante.
+      if (!ok) this.#failed.add(id);
       this.#fetching.delete(id);
     });
   }

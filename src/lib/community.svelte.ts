@@ -1,5 +1,5 @@
 import { COMMUNITY, type CommunityList, type CommunityPage, type CommunitySort, type Published, type PublishBody } from '../../shared/community';
-import { ApiError, apiGet, apiPost, apiUrl } from './api';
+import { ApiError, apiGet, apiPost, apiUrl, RawJson } from './api';
 import type { Editor } from './editor.svelte';
 import { saveShared, toShared } from './share';
 import { pref, setPref } from './utils';
@@ -21,11 +21,12 @@ export const ownerOf = (pubId: string): string | undefined => Object.keys(publis
 
 export const communityImg = (id: string, item: string): string => apiUrl(`/community/${id}/img/${item}`);
 
-async function body(ed: Editor, author: string, token?: string): Promise<PublishBody> {
+/** Corps de publication sérialisé une seule fois : la même chaîne sert au contrôle de taille et à l'envoi. */
+async function body(ed: Editor, author: string, token?: string): Promise<RawJson> {
   const list = await toShared({ title: ed.title, tiers: ed.tiers, pool: ed.pool, items: ed.items });
-  const b: PublishBody = { author: author.trim(), list, ...(token ? { token } : {}) };
-  if (JSON.stringify(b).length > COMMUNITY.body) throw new ApiError(413, 'Liste trop lourde pour être publiée (trop d’images)');
-  return b;
+  const text = JSON.stringify({ author: author.trim(), list, ...(token ? { token } : {}) } satisfies PublishBody);
+  if (text.length > COMMUNITY.body) throw new ApiError(413, 'Liste trop lourde pour être publiée (trop d’images)');
+  return new RawJson(text);
 }
 
 export async function publish(ed: Editor, author: string): Promise<Published> {

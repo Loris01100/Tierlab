@@ -26,14 +26,19 @@ export function apiGet<T>(path: string, params?: Params, signal?: AbortSignal): 
   return request<T>(apiUrl(path, params), { signal, headers: { Accept: 'application/json' } });
 }
 
-/** POST d'un corps JSON, ou d'un Blob tel quel (son type devient le Content-Type). */
+/** Corps JSON déjà sérialisé (ex. pour en vérifier la taille avant l'envoi sans sérialiser deux fois). */
+export class RawJson {
+  constructor(readonly text: string) {}
+}
+
+/** POST d'un corps JSON, d'un RawJson tel quel, ou d'un Blob tel quel (son type devient le Content-Type). */
 export function apiPost<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
   const blob = body instanceof Blob;
   return request<T>(apiUrl(path), {
     method: 'POST',
     signal,
     headers: { Accept: 'application/json', 'Content-Type': blob ? body.type : 'application/json' },
-    body: blob ? body : JSON.stringify(body),
+    body: blob ? body : body instanceof RawJson ? body.text : JSON.stringify(body),
   });
 }
 

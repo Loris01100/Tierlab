@@ -109,6 +109,8 @@ export class Editor {
     this.#pending = this.snap();
   }
   endEdit() {
+    // Fin de saisie : la dernière valeur part tout de suite, sans attendre la pause de frappe.
+    this.live?.release();
     if (this.#pending && this.#pending !== this.snap()) this.pushHistory(this.#pending);
     this.#pending = null;
     this.touch();
@@ -143,15 +145,19 @@ export class Editor {
 
   /* ---------- vignettes ---------- */
 
-  #add(it: Item) {
-    this.items = { ...this.items, [it.id]: it };
-    this.#dirty.add(it.id);
+  /** Ajoute des vignettes en une seule copie de `items` (pas une par vignette : un import de 200 resterait linéaire). */
+  #add(...its: Item[]) {
+    this.items = { ...this.items, ...Object.fromEntries(its.map((it) => [it.id, it])) };
+    for (const it of its) this.#dirty.add(it.id);
   }
 
-  /** Applique une opération à l'état local, la transmet en édition partagée, puis programme la sauvegarde. */
-  #run(op: Op) {
+  /**
+   * Applique une opération à l'état local, la transmet en édition partagée, puis programme la sauvegarde.
+   * hold : saisie continue (titre, nom de rang) ; l'envoi attend une pause de frappe et les frappes successives fusionnent.
+   */
+  #run(op: Op, hold = false) {
     applyOp(this, op);
-    this.live?.send(op);
+    this.live?.send(op, hold);
     this.touch();
   }
 
@@ -191,7 +197,7 @@ export class Editor {
   /** Ajoute des vignettes neuves à une zone, en une seule étape d'annulation. */
   #addAll(items: Item[], zone: string) {
     this.commit();
-    for (const it of items) this.#add(it);
+    this.#add(...items);
     this.#run({ k: 'add', zone, items: items.map(toLive) });
   }
 
@@ -292,7 +298,7 @@ export class Editor {
   }
   /** Renommage en direct (entre beginEdit et endEdit). */
   renameTierLive(id: string, name: string) {
-    if (this.tiers.some((x) => x.id === id)) this.#run({ k: 'tierSet', id, name });
+    if (this.tiers.some((x) => x.id === id)) this.#run({ k: 'tierSet', id, name }, true);
   }
   clearTier(id: string) {
     if (!this.tiers.some((x) => x.id === id)) return;
@@ -313,7 +319,7 @@ export class Editor {
   }
 
   setTitleLive(v: string) {
-    this.#run({ k: 'title', title: v.slice(0, LIMITS.title) });
+    this.#run({ k: 'title', title: v.slice(0, LIMITS.title) }, true);
   }
 
   /* ---------- glisser-déposer ---------- */

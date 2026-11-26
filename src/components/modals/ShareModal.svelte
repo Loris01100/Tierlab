@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import { COMMUNITY } from '../../../shared/community';
   import { ApiError } from '../../lib/api';
   import { publish, published, republish, unpublish } from '../../lib/community.svelte';
@@ -15,12 +14,21 @@
   let { ed, onclose }: { ed: Editor; onclose: () => void } = $props();
 
   let code = $state('');
-  let out: HTMLTextAreaElement;
+  let coding = $state(false);
+  let out = $state<HTMLTextAreaElement>();
   let linkIn = $state<HTMLInputElement>();
 
-  onMount(async () => {
-    code = JSON.stringify(await toShared({ title: ed.title, tiers: ed.tiers, pool: ed.pool, items: ed.items }));
-  });
+  /** Le code embarque toutes les images en base64 : il n'est calculé qu'à la demande, pas à chaque ouverture de la fenêtre. */
+  async function makeCode() {
+    coding = true;
+    try {
+      code = JSON.stringify(await toShared({ title: ed.title, tiers: ed.tiers, pool: ed.pool, items: ed.items }));
+    } catch {
+      toast('Création du code impossible');
+    } finally {
+      coding = false;
+    }
+  }
 
   async function copy(text: string, field: HTMLInputElement | HTMLTextAreaElement | undefined, done: string) {
     try {
@@ -163,10 +171,18 @@
   {/if}
 
   <h3 class="msub">Code de la liste</h3>
-  <label for="shOut">Copie figée à envoyer, à ouvrir avec « Importer un code » dans la bibliothèque</label>
-  <textarea bind:this={out} id="shOut" readonly value={code || 'Préparation…'}></textarea>
+  {#if code}
+    <label for="shOut">Copie figée à envoyer, à ouvrir avec « Importer un code » dans la bibliothèque</label>
+    <textarea bind:this={out} id="shOut" readonly value={code}></textarea>
+  {:else}
+    <p class="small">Copie figée à envoyer, à ouvrir avec « Importer un code » dans la bibliothèque. Les images y sont incluses : le code peut être long.</p>
+  {/if}
   <div class="foot">
     <button class="btn" onclick={onclose}>Fermer</button>
-    <button class="btn" disabled={!code} onclick={() => copy(code, out, 'Code copié')}>Copier le code</button>
+    {#if code}
+      <button class="btn" onclick={() => copy(code, out, 'Code copié')}>Copier le code</button>
+    {:else}
+      <button class="btn" disabled={coding} onclick={makeCode}>{coding ? 'Préparation…' : 'Générer le code'}</button>
+    {/if}
   </div>
 </Modal>
