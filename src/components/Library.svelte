@@ -279,6 +279,7 @@
                 <span class="lmeta">
                   <span class="pill">{plural(n, 'vignette')}</span>
                   <span class="pill">{plural(l.tiers.length, 'rang')}</span>
+                  {#if l.live}<span class="pill">Partagée</span>{/if}
                   <time datetime={new Date(l.updatedAt).toISOString()}>{relTime(l.updatedAt)}</time>
                 </span>
               </div>

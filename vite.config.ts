@@ -1,23 +1,12 @@
-import { defineConfig, loadEnv, type Plugin } from 'vite';
+import { cloudflare } from '@cloudflare/vite-plugin';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
-import type { Env } from './server/api';
-import { nodeApi } from './server/node';
+import { defineConfig } from 'vite';
 
-/** Monte les routes /api sur le serveur de dev et sur `vite preview`. Les secrets ne quittent pas le serveur. */
-function api(env: Env): Plugin {
-  const handler = nodeApi(env);
-  return {
-    name: 'tierlab-api',
-    configureServer: (server) => void server.middlewares.use('/api', handler),
-    configurePreviewServer: (server) => void server.middlewares.use('/api', handler),
-  };
-}
-
-export default defineConfig(({ mode }) => {
-  // Préfixe '' : charge toutes les variables de .env / .env.local, y compris celles sans VITE_.
-  // Seules les variables VITE_* sont exposées au navigateur ; les autres restent côté serveur.
-  const env = { ...loadEnv(mode, process.cwd(), ''), ...process.env };
-  return {
-    plugins: [svelte(), api(env)],
-  };
+/**
+ * Le plugin Cloudflare exécute server/worker.ts dans le vrai runtime Workers (workerd) en dev et en preview :
+ * les routes /api, les Durable Objects (édition partagée) et les WebSockets se comportent comme en production.
+ * Variables serveur en local : .env.local ou .dev.vars (sans préfixe VITE_), lus par Wrangler.
+ */
+export default defineConfig({
+  plugins: [svelte(), cloudflare()],
 });

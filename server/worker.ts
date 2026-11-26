@@ -1,8 +1,11 @@
 import { handleApi } from './routes';
 
+export { LiveRoom } from './liveRoom';
+
 /**
- * Point d'entrée du Worker Cloudflare (voir wrangler.jsonc).
+ * Point d'entrée du Worker Cloudflare (voir wrangler.jsonc), aussi exécuté en dev par @cloudflare/vite-plugin.
  * Les fichiers de dist/ sont servis directement par Cloudflare ; seules les URL /api/* passent par ici.
+ * LiveRoom est le Durable Object des salles d'édition partagée (liaison LIVE).
  */
 
 interface WorkerEnv {

@@ -90,11 +90,21 @@
     if (!ed.selId) return;
     poof(tileEl(ed.selId));
     ed.remove(ed.selId);
-    toast('Vignette supprimée (Ctrl+Z pour annuler)');
+    toast(deletedMsg());
   }
   function undo() {
     if (ed.undo()) toast('Action annulée');
+    else if (ed.live) toast('Annulation indisponible en édition partagée');
   }
+  const deletedMsg = () => (ed.live ? 'Vignette supprimée' : 'Vignette supprimée (Ctrl+Z pour annuler)');
+
+  /* ---------- édition partagée ---------- */
+  const liveLabel = $derived.by(() => {
+    const l = ed.live;
+    if (!l) return '';
+    if (l.status === 'online') return `${l.peers} en ligne`;
+    return l.status === 'gone' ? 'Lien expiré' : l.status === 'offline' ? 'Hors ligne' : 'Connexion…';
+  });
   async function importFiles(files: Iterable<File>, zone = POOL) {
     const added = await ed.addImages(files, zone);
     toast(added.length ? `${plural(added.length, 'image')} ajoutée${added.length > 1 ? 's' : ''}` : 'Aucune image reconnue');
@@ -178,7 +188,7 @@
           void tr.offsetWidth;
           tr.classList.add('gulp');
         };
-        toast('Vignette supprimée (Ctrl+Z pour annuler)');
+        toast(deletedMsg());
       },
     });
     const hide = () => document.visibilityState === 'hidden' && void ed.flush();
@@ -315,8 +325,21 @@
   />
   <div class="acts">
     <button class="btn" onclick={() => go('/')} aria-label="Mes tier listes"><Icon name="grid" /><span>Mes listes</span></button>
-    <button class="btn" title="Annuler (Ctrl+Z)" aria-label="Annuler" disabled={!ed.canUndo} onclick={undo}><Icon name="undo" /><span>Annuler</span></button>
-    <button class="btn" aria-label="Partager" onclick={() => (modal = { kind: 'share' })}><Icon name="code" /><span>Partager</span></button>
+    <button
+      class="btn"
+      title={ed.live ? 'Annulation indisponible en édition partagée' : 'Annuler (Ctrl+Z)'}
+      aria-label="Annuler"
+      disabled={!ed.canUndo}
+      onclick={undo}><Icon name="undo" /><span>Annuler</span></button
+    >
+    {#if ed.live}
+      <!-- liste partagée : la pastille d'état remplace le bouton Partager et ouvre la même fenêtre -->
+      <button class="btn live" data-s={ed.live.status} title="Édition partagée : {liveLabel}" aria-label="Partager (édition partagée, {liveLabel})" onclick={() => (modal = { kind: 'share' })}
+        ><Icon name="users" /><span>{liveLabel}</span></button
+      >
+    {:else}
+      <button class="btn" aria-label="Partager" onclick={() => (modal = { kind: 'share' })}><Icon name="users" /><span>Partager</span></button>
+    {/if}
     <button class="btn pri" aria-label="Exporter en image" onclick={(e) => exportImage(e.currentTarget)}><Icon name="dl" /><span>Exporter en image</span></button>
   </div>
 </header>

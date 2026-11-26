@@ -124,8 +124,7 @@ export function attachDrag(ed: Editor, hooks: DragHooks): () => void {
       return;
     }
     if (ed.snap() !== s.before) {
-      ed.pushHistory(s.before);
-      ed.touch();
+      ed.dropped(s.id, s.before);
       hooks.landed(s.id, ed.isDone(s.poolBefore));
     }
   };

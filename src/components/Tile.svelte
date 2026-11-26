@@ -16,13 +16,14 @@
   } = $props();
 
   const src = $derived(item.type === 'img' ? blobUrl(item.blob) : '');
-  const label = $derived(item.text || (item.type === 'img' ? 'Image' : ''));
+  const label = $derived(item.text || (item.type === 'img' ? (item.blob ? 'Image' : 'Image en cours de chargement') : ''));
 </script>
 
 {#if item.type === 'img'}
   <div
     class="tile"
     class:capt={!!item.text}
+    class:wait={!item.blob}
     class:sel={selected}
     class:drag={dragging}
     data-id={id}

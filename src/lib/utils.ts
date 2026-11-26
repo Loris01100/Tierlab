@@ -4,8 +4,7 @@ export function uid(): string {
   return Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
 }
 
-export const isColor = (c: unknown): c is string =>
-  typeof c === 'string' && /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(c);
+export { isColor } from '../../shared/rules';
 
 export const hex6 = (c: string): string =>
   c.length === 4 ? '#' + [...c.slice(1)].map((x) => x + x).join('') : c;

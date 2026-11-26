@@ -6,10 +6,10 @@ Créateur de tier listes : Svelte 5 + TypeScript + IndexedDB (Dexie), construit 
 
 ```bash
 npm install      # dépendances
-npm run dev      # serveur de dev sur http://localhost:5173
+npm run dev      # serveur de dev sur http://localhost:5173 (le Worker /api tourne dans workerd)
 npm run check    # vérification des types (svelte-check)
-npm run build    # build de production dans dist/
-npm run cf:dev   # build puis Worker Cloudflare en local (wrangler dev)
+npm run build    # build de production dans dist/ (client/ et worker mainlist/)
+npm run preview  # sert le build, Worker compris
 npm run deploy   # build puis déploiement sur https://mainlist.reesch.com
 ```
 
@@ -23,8 +23,8 @@ Première fois : `npx wrangler login`. Ensuite `npm run deploy` suffit.
 
 Le navigateur n'appelle jamais les services externes directement : il passe par `/api/...`. Le routeur
 (`server/api.ts`) utilise les objets web standards `Request` / `Response` : il tourne dans le Worker Cloudflare en production
-et, via un adaptateur Node (`server/node.ts`), dans Vite (`npm run dev` et `npm run preview`). Si un service demande une clé, elle reste
-côté serveur : la mettre dans `.env.local` (voir `.env.example`, ignoré par git), sans préfixe `VITE_`.
+et, grâce à `@cloudflare/vite-plugin`, dans le même runtime (workerd) sous Vite (`npm run dev` et `npm run preview`). Si un service demande une clé, elle reste
+côté serveur : la mettre dans `.env.local` ou `.dev.vars` (ignorés par git), sans préfixe `VITE_` ; en production, `npx wrangler secret put`.
 
 Ajouter un service : écrire un module dans `server/` qui exporte des `Route[]` (voir `server/deezer.ts`),
 l'ajouter dans `server/routes.ts`, puis l'appeler depuis le front avec `apiGet()` (`src/lib/api.ts`).
@@ -60,13 +60,32 @@ Toutes les catégories partagent le même contrat (`shared/catalog.ts`) et les m
 Ajouter une catégorie : une entrée dans `CATALOGS` (`shared/catalog.ts`), un module serveur qui implémente `CatalogSource`
 (`search`, `list` facultatif, domaines d'images), et son enregistrement dans `server/routes.ts`. La modale n'a pas à changer.
 
+## Édition partagée (plusieurs personnes sur la même liste)
+
+**Partager → Créer le lien partagé** envoie la liste au serveur et donne un lien `#/live/<salle>`. Toute personne qui l'ouvre
+voit et modifie la même liste en temps réel ; l'en-tête affiche le nombre de personnes connectées. Pas de comptes :
+connaître le lien suffit. Chaque appareil garde une copie locale (IndexedDB, champ `live` de la liste, badge « Partagée »
+dans la bibliothèque) ; « Arrêter la synchro » la rend indépendante. L'annulation (Ctrl+Z) est désactivée en mode partagé.
+
+Fonctionnement :
+- une salle = un Durable Object Cloudflare (`server/liveRoom.ts`, stockage SQLite), qui fait foi : il applique les
+  modifications dans l'ordre d'arrivée et les relaie par WebSocket (`GET /api/live/:salle/ws`) ;
+- une modification est une opération d'intention (`shared/live.ts` : « mettre X dans tel rang à telle place », « renommer le rang »…),
+  appliquée par le même code `applyOp` dans le navigateur et sur le serveur ;
+- chaque client applique ses opérations tout de suite et recalcule son état à chaque opération reçue
+  (état confirmé par le serveur + ses opérations pas encore acquittées), voir `src/lib/live.svelte.ts` ;
+- les images partent à part (`POST /api/live/:salle/img/:id`, avant l'opération qui les utilise) et sont téléchargées
+  par les autres (`GET` sur la même route).
+
+Autres routes : `POST /api/live` (création, renvoie `{ room }`), `GET /api/live/:salle/info` (titre, 404 si le lien n'existe pas).
+
 ## Structure
 
 ```
-server/                    API côté serveur : routeur /api, relais d'images, musique (Deezer), catalogues, Worker, adaptateur Vite
-shared/                    types partagés serveur / navigateur
+server/                    API côté serveur : routeur /api, relais d'images, musique (Deezer), catalogues, salles partagées, Worker
+shared/                    types et règles partagés serveur / navigateur (live.ts : opérations d'édition partagée)
 src/
-  main.ts, App.svelte      point d'entrée, routage #/ et #/list/<id>
+  main.ts, App.svelte      point d'entrée, routage #/, #/list/<id> et #/live/<salle>
   app.css                  feuille de style unique (reprise du prototype)
   lib/
     types.ts               Item, Tier, TierList
@@ -78,6 +97,7 @@ src/
     music.ts               recherche d'artiste, discographie, titres
     catalog.ts             catalogues : recherche et listes prédéfinies
     share.ts               code de partage JSON (compatible avec le prototype)
+    live.svelte.ts         édition partagée : connexion WebSocket, opérations en attente, images
     exportImage.ts         export PNG via canvas
     effects.ts             confettis
     model.ts, constants.ts, utils.ts, router.svelte.ts, toast.svelte.ts

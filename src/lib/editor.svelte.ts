@@ -1,11 +1,13 @@
+import { applyOp, POOL, type LiveItem, type Op, type Structure } from '../../shared/live';
 import { LIMITS, TILE_COLORS } from './constants';
 import { saveList } from './db';
 import { shrink } from './images';
+import { fromLive, LiveLink, toLive } from './live.svelte';
 import { toast } from './toast.svelte';
 import type { Item, ItemDraft, Tier, TierList } from './types';
 import { fgFor, uid } from './utils';
 
-export const POOL = 'pool';
+export { POOL };
 
 interface Snap {
   title: string;
@@ -17,7 +19,8 @@ interface Snap {
  * État réactif d'une tier liste ouverte.
  * - title / tiers / pool : structure, versionnée par l'historique (instantanés JSON)
  * - items : vignettes immuables ; modifier une vignette en crée une nouvelle, ce qui garde l'annulation simple
- * Toute mutation appelle touch(), qui sauvegarde dans IndexedDB après 400 ms d'inactivité.
+ * Toute mutation passe par une opération (shared/live.ts) appliquée par #run, qui appelle touch() :
+ * sauvegarde dans IndexedDB après 400 ms d'inactivité. En édition partagée (live), l'opération part aussi au serveur.
  */
 export class Editor {
   readonly id: string;
@@ -36,6 +39,9 @@ export class Editor {
   overZone = $state<string | null>(null);
   overTrash = $state(false);
 
+  /** Lien d'édition partagée, null pour une liste seulement locale. */
+  live = $state.raw<LiveLink | null>(null);
+
   #hist = $state.raw<string[]>([]);
   canUndo = $derived(this.#hist.length > 0);
 
@@ -44,6 +50,9 @@ export class Editor {
   #pending: string | null = null;
   #saving: Promise<void> = Promise.resolve();
   #rot = 0;
+  #room: string | undefined;
+  /** Dernière place provisoire pendant un glisser, réappliquée si un autre client modifie la liste. */
+  #dragAt: { id: string; zone: string; index: number } | null = null;
 
   constructor(list: TierList, items: Item[]) {
     this.id = list.id;
@@ -52,6 +61,10 @@ export class Editor {
     this.tiers = list.tiers;
     this.pool = list.pool;
     this.items = Object.fromEntries(items.map((i) => [i.id, i]));
+    if (list.live) {
+      this.#room = list.live;
+      this.live = new LiveLink(this, list.live);
+    }
   }
 
   /* ---------- historique ---------- */
@@ -66,6 +79,8 @@ export class Editor {
     this.pool = d.pool;
   }
   pushHistory(s: string) {
+    // En édition partagée, restaurer un instantané écraserait les modifications des autres.
+    if (this.live) return;
     const h = [...this.#hist, s];
     if (h.length > LIMITS.history) h.shift();
     this.#hist = h;
@@ -84,6 +99,8 @@ export class Editor {
   }
   /** Revient à un instantané sans l'ajouter à l'historique (drag annulé). */
   revert(s: string) {
+    this.#dragAt = null;
+    if (this.live) return this.live.refresh();
     this.#restore(s);
     this.touch();
   }
@@ -131,6 +148,19 @@ export class Editor {
     this.#dirty.add(it.id);
   }
 
+  /** Applique une opération à l'état local, la transmet en édition partagée, puis programme la sauvegarde. */
+  #run(op: Op) {
+    applyOp(this, op);
+    this.live?.send(op);
+    this.touch();
+  }
+
+  /** Zone (POOL ou id de rang) contenant la vignette, null si elle n'est pas placée. */
+  zoneOf(id: string): string | null {
+    if (this.pool.includes(id)) return POOL;
+    return this.tiers.find((t) => t.items.includes(id))?.id ?? null;
+  }
+
   /** Classe une vignette ; renvoie true si la liste vient d'être terminée. */
   moveTo(id: string, zone: string): boolean {
     const { list, index } = this.where(id);
@@ -138,11 +168,9 @@ export class Editor {
     const before = this.pool.length;
     const fromPool = list === this.pool;
     this.commit();
-    list.splice(index, 1);
-    this.listOf(zone).push(id);
+    this.#run({ k: 'move', id, zone });
     // depuis la réserve : la sélection passe à la vignette suivante pour enchaîner au clavier
     this.selId = fromPool && zone !== POOL ? (this.pool[index] ?? this.pool[this.pool.length - 1] ?? null) : null;
-    this.touch();
     return this.isDone(before);
   }
 
@@ -155,9 +183,23 @@ export class Editor {
   discard(id: string) {
     const { list, index } = this.where(id);
     if (!list) return;
-    list.splice(index, 1);
-    if (this.selId === id) this.selId = list === this.pool ? (this.pool[index] ?? null) : null;
-    this.touch();
+    const inPool = list === this.pool;
+    this.#run({ k: 'remove', id });
+    if (this.selId === id) this.selId = inPool ? (this.pool[index] ?? null) : null;
+  }
+
+  /** Ajoute des vignettes neuves à une zone, en une seule étape d'annulation. */
+  #addAll(items: Item[], zone: string) {
+    this.commit();
+    for (const it of items) this.#add(it);
+    this.#run({ k: 'add', zone, items: items.map(toLive) });
+  }
+
+  #textItem(text: string, bg: string): Item {
+    return { id: uid(), listId: this.id, type: 'text', text, bg, fg: fgFor(bg) };
+  }
+  #nextColor(): string {
+    return TILE_COLORS[this.#rot++ % TILE_COLORS.length];
   }
 
   /** Ajoute une ou plusieurs vignettes texte (séparées par virgule, point-virgule ou retour ligne). */
@@ -168,40 +210,26 @@ export class Editor {
       .filter(Boolean)
       .slice(0, 100);
     if (!parts.length) return 0;
-    this.commit();
-    const target = this.listOf(zone);
-    for (const text of parts) {
-      const bg = this.textColor === 'mix' ? TILE_COLORS[this.#rot++ % TILE_COLORS.length] : this.textColor;
-      const it: Item = { id: uid(), listId: this.id, type: 'text', text, bg, fg: fgFor(bg) };
-      this.#add(it);
-      target.push(it.id);
-    }
-    this.touch();
+    this.#addAll(
+      parts.map((text) => this.#textItem(text, this.textColor === 'mix' ? this.#nextColor() : this.textColor)),
+      zone,
+    );
     return parts.length;
   }
 
   /** Importe des images (réduites à 320 px). Renvoie les ids créés. */
   async addImages(files: Iterable<File>, zone = POOL): Promise<string[]> {
     const fs = [...files].filter((f) => f.type.startsWith('image/')).slice(0, LIMITS.importImages);
-    if (!fs.length) return [];
-    const before = this.snap();
-    const added: string[] = [];
+    const items: Item[] = [];
     for (const f of fs) {
       try {
-        const blob = await shrink(f);
-        const it: Item = { id: uid(), listId: this.id, type: 'img', text: '', blob };
-        this.#add(it);
-        this.listOf(zone).push(it.id);
-        added.push(it.id);
+        items.push({ id: uid(), listId: this.id, type: 'img', text: '', blob: await shrink(f) });
       } catch {
         /* fichier ignoré */
       }
     }
-    if (added.length) {
-      this.pushHistory(before);
-      this.touch();
-    }
-    return added;
+    if (items.length) this.#addAll(items, zone);
+    return items.map((i) => i.id);
   }
 
   /**
@@ -210,41 +238,35 @@ export class Editor {
    */
   addEntries(entries: { text: string; blob?: Blob }[], zone = POOL): string[] {
     if (!entries.length) return [];
-    this.commit();
-    const target = this.listOf(zone);
-    const added: string[] = [];
-    for (const e of entries) {
+    const items = entries.map((e): Item => {
       const text = e.text.trim().slice(0, LIMITS.tileText);
-      let it: Item;
-      if (e.blob) it = { id: uid(), listId: this.id, type: 'img', text, blob: e.blob };
-      else {
-        const bg = TILE_COLORS[this.#rot++ % TILE_COLORS.length];
-        it = { id: uid(), listId: this.id, type: 'text', text: text || '?', bg, fg: fgFor(bg) };
-      }
-      this.#add(it);
-      target.push(it.id);
-      added.push(it.id);
-    }
-    this.touch();
-    return added;
+      return e.blob ? { id: uid(), listId: this.id, type: 'img', text, blob: e.blob } : this.#textItem(text || '?', this.#nextColor());
+    });
+    this.#addAll(items, zone);
+    return items.map((i) => i.id);
   }
 
   replaceItem(id: string, draft: ItemDraft) {
-    const { list, index } = this.where(id);
     this.commit();
     const it: Item = { ...draft, id: uid(), listId: this.id };
     this.#add(it);
-    if (list) list[index] = it.id;
+    this.#run({ k: 'replace', id, item: toLive(it) });
     this.selId = it.id;
-    this.touch();
   }
 
   duplicateItem(id: string, draft: ItemDraft) {
-    const { list, index } = this.where(id);
     this.commit();
     const it: Item = { ...draft, id: uid(), listId: this.id };
     this.#add(it);
-    if (list) list.splice(index + 1, 0, it.id);
+    this.#run({ k: 'dup', id, item: toLive(it) });
+  }
+
+  /** Image d'une vignette reçue en édition partagée (téléchargée après coup). */
+  setBlob(id: string, blob: Blob) {
+    const it = this.items[id];
+    if (!it || it.blob) return;
+    this.items = { ...this.items, [id]: { ...it, blob } };
+    this.#dirty.add(id);
     this.touch();
   }
 
@@ -252,75 +274,114 @@ export class Editor {
 
   addTier(at = this.tiers.length): string {
     this.commit();
-    const t: Tier = { id: uid(), name: 'Nouveau', color: '#d0d0d0', items: [] };
-    this.tiers.splice(at, 0, t);
-    this.touch();
-    return t.id;
+    const tier = { id: uid(), name: 'Nouveau', color: '#d0d0d0' };
+    this.#run({ k: 'tierAdd', at, tier });
+    return tier.id;
   }
   moveTier(i: number, dir: -1 | 1) {
     const j = i + dir;
     if (j < 0 || j >= this.tiers.length) return;
     this.commit();
-    const [t] = this.tiers.splice(i, 1);
-    this.tiers.splice(j, 0, t);
-    this.touch();
+    this.#run({ k: 'tierMove', id: this.tiers[i].id, to: j });
   }
   updateTier(id: string, name: string, color: string) {
     const t = this.tiers.find((x) => x.id === id);
     if (!t) return;
     this.commit();
-    t.name = name.trim().slice(0, LIMITS.tierName) || t.name;
-    t.color = color;
-    this.touch();
+    this.#run({ k: 'tierSet', id, name: name.trim().slice(0, LIMITS.tierName) || t.name, color });
   }
   /** Renommage en direct (entre beginEdit et endEdit). */
   renameTierLive(id: string, name: string) {
-    const t = this.tiers.find((x) => x.id === id);
-    if (t) t.name = name;
-    this.touch();
+    if (this.tiers.some((x) => x.id === id)) this.#run({ k: 'tierSet', id, name });
   }
   clearTier(id: string) {
-    const t = this.tiers.find((x) => x.id === id);
-    if (!t) return;
+    if (!this.tiers.some((x) => x.id === id)) return;
     this.commit();
-    this.pool.push(...t.items);
-    t.items = [];
-    this.touch();
+    this.#run({ k: 'tierClear', id });
   }
   deleteTier(id: string) {
-    const i = this.tiers.findIndex((x) => x.id === id);
-    if (i < 0) return;
+    if (!this.tiers.some((x) => x.id === id)) return;
     this.commit();
-    this.pool.push(...this.tiers[i].items);
-    this.tiers.splice(i, 1);
-    this.touch();
+    this.#run({ k: 'tierDelete', id });
   }
   /** Remet toutes les vignettes en réserve. false si les rangs étaient déjà vides. */
   resetAll(): boolean {
-    const all = this.tiers.flatMap((t) => t.items);
-    if (!all.length) return false;
+    if (!this.tiers.some((t) => t.items.length)) return false;
     this.commit();
-    this.pool.push(...all);
-    for (const t of this.tiers) t.items = [];
-    this.touch();
+    this.#run({ k: 'reset' });
     return true;
   }
 
   setTitleLive(v: string) {
-    this.title = v.slice(0, LIMITS.title);
-    this.touch();
+    this.#run({ k: 'title', title: v.slice(0, LIMITS.title) });
   }
 
   /* ---------- glisser-déposer ---------- */
 
-  /** Place la vignette à l'index donné (index compté sans la vignette déplacée). */
+  /** Place la vignette à l'index donné (index compté sans la vignette déplacée). Local seulement, jusqu'au lâcher. */
   placeLive(id: string, zone: string, index: number) {
+    this.#dragAt = { id, zone, index };
+    this.#place(id, zone, index);
+  }
+  #place(id: string, zone: string, index: number) {
     const { list, index: cur } = this.where(id);
     if (!list) return;
     const target = this.listOf(zone);
     if (list === target && cur === index) return;
     list.splice(cur, 1);
     target.splice(Math.min(index, target.length), 0, id);
+  }
+
+  /** Fin d'un glisser réussi : un pas d'historique et, en édition partagée, la place finale envoyée aux autres. */
+  dropped(id: string, before: string) {
+    this.#dragAt = null;
+    this.pushHistory(before);
+    const zone = this.zoneOf(id);
+    if (zone) this.#run({ k: 'move', id, zone, at: this.where(id).index });
+    else this.touch();
+  }
+
+  /* ---------- édition partagée ---------- */
+
+  /** Relie la liste à une salle partagée (l'historique local est abandonné : l'annulation y est désactivée). */
+  goLive(room: string) {
+    this.live?.close();
+    this.#room = room;
+    this.#hist = [];
+    this.live = new LiveLink(this, room);
+    void this.flush();
+  }
+
+  /** Arrête la synchronisation : la liste redevient une copie locale indépendante. */
+  leaveLive() {
+    this.live?.close();
+    this.live = null;
+    this.#room = undefined;
+    void this.flush();
+  }
+
+  /** Structure actuelle, hors réactivité (clonable). */
+  structure(): Structure {
+    return { title: this.title, tiers: $state.snapshot(this.tiers), pool: $state.snapshot(this.pool) };
+  }
+
+  /**
+   * Remplace la structure par celle calculée par le lien partagé (état du serveur + nos opérations en attente)
+   * et ajoute les vignettes reçues. Un glisser en cours garde sa place provisoire.
+   */
+  adopt(s: Structure, incoming: LiveItem[]) {
+    this.title = s.title;
+    this.tiers = s.tiers;
+    this.pool = s.pool;
+    const add = incoming.filter((i) => !this.items[i.id]);
+    if (add.length) {
+      this.items = { ...this.items, ...Object.fromEntries(add.map((i) => [i.id, fromLive(i, this.id)])) };
+      for (const i of add) this.#dirty.add(i.id);
+    }
+    const d = this.#dragAt;
+    if (d && this.dragId === d.id) this.#place(d.id, d.zone, d.index);
+    if (this.selId && !this.where(this.selId).list) this.selId = null;
+    this.touch();
   }
 
   /* ---------- sauvegarde ---------- */
@@ -340,6 +401,7 @@ export class Editor {
       pool: $state.snapshot(this.pool),
       createdAt: this.createdAt,
       updatedAt: Date.now(),
+      ...(this.#room ? { live: this.#room } : {}),
     };
     const dirty = [...this.#dirty].map((id) => this.items[id]).filter(Boolean);
     this.#dirty.clear();

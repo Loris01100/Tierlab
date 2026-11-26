@@ -31,4 +31,6 @@ export interface TierList {
   pool: string[];
   createdAt: number;
   updatedAt: number;
+  /** Salle d'édition partagée à laquelle cette liste est reliée (copie locale synchronisée), absent sinon. */
+  live?: string;
 }

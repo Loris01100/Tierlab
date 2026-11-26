@@ -8,13 +8,13 @@
     "build": "vite build",
     "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.json && tsc -p tsconfig.node.json",
-    "deploy": "vite build && wrangler deploy",
-    "cf:dev": "vite build && wrangler dev"
+    "deploy": "vite build && wrangler deploy"
   },
   "dependencies": {
     "dexie": "^4.4.7"
   },
   "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.70.2",
     "@sveltejs/vite-plugin-svelte": "^7.3.2",
     "@tsconfig/svelte": "^5.0.9",
     "@types/node": "^26.6.10",

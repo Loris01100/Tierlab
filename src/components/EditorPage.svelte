@@ -17,7 +17,10 @@
     return ed;
   })();
 
-  onDestroy(releaseUrls);
+  onDestroy(() => {
+    void load.then((ed) => ed?.live?.close());
+    releaseUrls();
+  });
 </script>
 
 {#await load}

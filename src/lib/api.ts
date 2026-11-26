@@ -22,10 +22,25 @@ export function apiUrl(path: string, params: Params = {}): string {
 }
 
 /** GET JSON. Lève ApiError avec le message du serveur (en français) en cas d'échec. */
-export async function apiGet<T>(path: string, params?: Params, signal?: AbortSignal): Promise<T> {
+export function apiGet<T>(path: string, params?: Params, signal?: AbortSignal): Promise<T> {
+  return request<T>(apiUrl(path, params), { signal, headers: { Accept: 'application/json' } });
+}
+
+/** POST d'un corps JSON, ou d'un Blob tel quel (son type devient le Content-Type). */
+export function apiPost<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
+  const blob = body instanceof Blob;
+  return request<T>(apiUrl(path), {
+    method: 'POST',
+    signal,
+    headers: { Accept: 'application/json', 'Content-Type': blob ? body.type : 'application/json' },
+    body: blob ? body : JSON.stringify(body),
+  });
+}
+
+async function request<T>(url: string, init: RequestInit): Promise<T> {
   let r: Response;
   try {
-    r = await fetch(apiUrl(path, params), { signal, headers: { Accept: 'application/json' } });
+    r = await fetch(url, init);
   } catch (e) {
     if ((e as Error).name === 'AbortError') throw e;
     throw new ApiError(0, 'Serveur injoignable');

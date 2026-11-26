@@ -7,11 +7,10 @@ Tierlab is a tier-list maker: Svelte 5 (runes) + TypeScript SPA, data stored loc
 ## Commands
 
 ```bash
-npm run dev      # Vite dev server on http://localhost:5173 (also serves /api)
+npm run dev      # Vite dev server on http://localhost:5173; /api runs in workerd via @cloudflare/vite-plugin
 npm run check    # svelte-check on src/ + shared/, then tsc on server/ + vite.config.ts (tsconfig.node.json)
 npm run build    # production build into dist/
-npm run preview  # serve dist/ with /api
-npm run cf:dev   # build, then run the real Worker locally (wrangler dev)
+npm run preview  # serve the build (dist/client + dist/mainlist worker) with /api
 npm run deploy   # build + wrangler deploy (needs `npx wrangler login` once)
 ```
 
@@ -24,22 +23,29 @@ To see the site: `npm run dev` then open http://localhost:5173. In VS Code, F5 (
 ### Two TypeScript projects
 - `tsconfig.json`: browser code (`src/`, `shared/`), DOM libs.
 - `tsconfig.node.json`: server code (`server/`, `vite.config.ts`), Node types, no DOM.
-- `shared/` holds types used by both sides (e.g. `shared/music.ts` for `/api/music` payloads) and must stay environment-neutral.
+- `shared/` holds types used by both sides (e.g. `shared/music.ts` for `/api/music` payloads) and must stay environment-neutral. `shared/rules.ts` holds `LIMITS` and `isColor` (re-exported by `src/lib/constants.ts` / `utils.ts`).
 
 ### `/api` backend — one router, two hosts
 - `server/api.ts` is a tiny router built on web-standard `Request`/`Response` (`Route` = method + path with `:params` + handler). Handlers return a JSON-serializable value or a full `Response` (e.g. image proxy); throw `HttpError(status, msg)` for client-facing errors.
 - `server/routes.ts` aggregates all `Route[]` into `handleApi`.
 - Production: `server/worker.ts` (Cloudflare). `wrangler.jsonc` routes only `/api/*` through the Worker; everything else is static from `dist/` with SPA fallback.
-- Dev/preview: `vite.config.ts` mounts the same handler via the Node adapter `server/node.ts`.
-- The browser never calls external services directly. Secrets go in `.env.local` **without** the `VITE_` prefix (loaded server-side by `vite.config.ts`; on Cloudflare, Worker env vars).
+- Dev/preview: `@cloudflare/vite-plugin` (`vite.config.ts`) runs `server/worker.ts` in workerd, Durable Objects and WebSockets included (local DO state in `.wrangler/state`). There is no Node adapter any more.
+- The browser never calls external services directly. Secrets go in `.env.local` or `.dev.vars` **without** the `VITE_` prefix (read by Wrangler through the plugin; on Cloudflare, `wrangler secret put`).
 - Adding a service: new module in `server/` exporting `Route[]` (model: `server/deezer.ts`), register it in `server/routes.ts`, call it from the front with `apiGet()` (`src/lib/api.ts`).
 - `server/deezer.ts`: public Deezer API (no key), 50 req / 5 s quota handled server-side with wait-and-retry.
 - `server/media.ts`: the single image proxy `/api/image?url=`; each module declares its `ImageHost[]` allowlist (host, subdomains, path prefix), redirects are re-checked per hop.
 - `server/http.ts`: shared outgoing helpers (`getJson` with host check + bounded retry on 429/5xx, `sleep`, cache constants, `fold`).
 - Catalogues (search → tiles): contract and category list in `shared/catalog.ts` (`CATALOGS`, `CatalogHit`); generic routes `/api/catalog/:source/search` and `/lists/:list` in `server/catalog.ts`; one `CatalogSource` per category (`server/tyradex.ts`, `anilist.ts` — GraphQL via `getJson({ body })`, `openlibrary.ts`), registered in `server/routes.ts` (typed `Record<CatalogId, …>`, so a missing one fails `npm run check`). Front: `src/lib/catalog.ts` + `CatalogModal.svelte` (single « Catalogues » dock button; Music is a special tab rendering `MusicPanel.svelte`, not a `CatalogSource`, because of its artist → releases → albums/tracks flow). Adding a category needs no front change.
 
+### Live collaboration (several people on one list)
+- One room = one Durable Object `LiveRoom` (`server/liveRoom.ts`, binding `LIVE`, SQLite storage, hibernatable WebSockets); routes in `server/live.ts`: `POST /api/live` (create from a `LiveBoard`), `GET /live/:room/info`, `GET /live/:room/ws`, `GET|POST /live/:room/img/:id`. The random room id is the only credential.
+- `shared/live.ts`: `Op` union (intent-based, idempotent: move/remove/add/replace/dup/tier*/reset/title), `applyOp` (same code client and server), `cleanOp`/`cleanBoard` (server-side validation), WebSocket messages.
+- Every `Editor` mutation builds an `Op` and goes through `#run` (`applyOp` on its own `$state` + `live?.send` + `touch`), in solo mode too. A new mutation = a new `Op` kind in `shared/live.ts`, never a direct state edit.
+- `src/lib/live.svelte.ts` (`LiveLink`): server-confirmed state + pending ops; on every remote op it recomputes confirmed+pending and calls `Editor.adopt()`. Images are uploaded before the op that references them; missing ones are fetched and set with `Editor.setBlob()`. Drag moves stay local (`placeLive`) until `Editor.dropped()` sends the final position.
+- A linked list keeps a local copy with `TierList.live = room` (Dexie v2 index `live`); `#/live/<room>` (`LiveJoin.svelte`) finds or creates it. Undo is disabled in live mode (`pushHistory` is a no-op).
+
 ### Front end
-- Hash routing (`src/lib/router.svelte.ts`): `#/` → `Library.svelte`, `#/list/<id>` → `EditorPage.svelte` (loads from IndexedDB) → `Editor.svelte`.
+- Hash routing (`src/lib/router.svelte.ts`): `#/` → `Library.svelte`, `#/list/<id>` → `EditorPage.svelte` (loads from IndexedDB) → `Editor.svelte`, `#/live/<room>` → `LiveJoin.svelte`.
 - `src/lib/editor.svelte.ts` — the `Editor` class is the reactive state of an open list (`$state` fields). All mutations go through its methods, which push an undo snapshot (JSON of `title`/`tiers`/`pool`) and call `touch()` → debounced (400 ms) save to IndexedDB. Drag state (`dragId`, `overZone`, `overTrash`) also lives here and is read by components. The unranked pool zone id is `POOL`.
 - `src/lib/drag.ts`: custom Pointer Events drag-and-drop (mouse + touch), no library.
 - Library (`Library.svelte`): search, sort (pref `tierlab-sort`), card previews read the first tiles via `previewItems()` (`db.ts`), « Démarrer vite » shortcuts create a list and hand the catalog tab to the editor through `pendingCatalog` (`src/lib/catalog.ts`).

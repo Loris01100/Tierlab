@@ -1,6 +1,6 @@
 /**
  * Mini routeur pour les appels d'API côté serveur, basé sur les objets web standards Request / Response.
- * Le même code tourne dans le Worker Cloudflare (server/worker.ts) et dans Vite en dev / preview (server/node.ts).
+ * Le même code tourne dans le Worker Cloudflare (server/worker.ts), en production comme en dev / preview (@cloudflare/vite-plugin).
  * Les clés secrètes restent ici : le navigateur n'appelle jamais les services externes directement.
  *
  * Ajouter un service : écrire un module qui exporte des Route[] et l'ajouter dans server/routes.ts.
