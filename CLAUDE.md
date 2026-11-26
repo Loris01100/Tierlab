@@ -33,7 +33,10 @@ To see the site: `npm run dev` then open http://localhost:5173. In VS Code, F5 (
 - Dev/preview: `vite.config.ts` mounts the same handler via the Node adapter `server/node.ts`.
 - The browser never calls external services directly. Secrets go in `.env.local` **without** the `VITE_` prefix (loaded server-side by `vite.config.ts`; on Cloudflare, Worker env vars).
 - Adding a service: new module in `server/` exporting `Route[]` (model: `server/deezer.ts`), register it in `server/routes.ts`, call it from the front with `apiGet()` (`src/lib/api.ts`).
-- `server/deezer.ts`: public Deezer API (no key), 50 req / 5 s quota handled server-side with wait-and-retry; the image proxy `/api/music/image?url=` is restricted to Deezer domains.
+- `server/deezer.ts`: public Deezer API (no key), 50 req / 5 s quota handled server-side with wait-and-retry.
+- `server/media.ts`: the single image proxy `/api/image?url=`; each module declares its `ImageHost[]` allowlist (host, subdomains, path prefix), redirects are re-checked per hop.
+- `server/http.ts`: shared outgoing helpers (`getJson` with host check + bounded retry on 429/5xx, `sleep`, cache constants, `fold`).
+- Catalogues (search → tiles): contract and category list in `shared/catalog.ts` (`CATALOGS`, `CatalogHit`); generic routes `/api/catalog/:source/search` and `/lists/:list` in `server/catalog.ts`; one `CatalogSource` per category (`server/tyradex.ts`, `anilist.ts` — GraphQL via `getJson({ body })`, `openlibrary.ts`), registered in `server/routes.ts` (typed `Record<CatalogId, …>`, so a missing one fails `npm run check`). Front: `src/lib/catalog.ts` + `CatalogModal.svelte`. Adding a category needs no front change.
 
 ### Front end
 - Hash routing (`src/lib/router.svelte.ts`): `#/` → `Library.svelte`, `#/list/<id>` → `EditorPage.svelte` (loads from IndexedDB) → `Editor.svelte`.

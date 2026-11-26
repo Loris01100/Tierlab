@@ -40,6 +40,16 @@ export async function apiGet<T>(path: string, params?: Params, signal?: AbortSig
   return body as T;
 }
 
+/** URL d'une image externe relayée par le serveur (domaines autorisés : voir server/media.ts). */
+export const imageUrl = (url: string): string => apiUrl('/image', { url });
+
+/** Télécharge une image externe en Blob, via le relais du serveur. */
+export async function fetchImage(url: string, signal?: AbortSignal): Promise<Blob> {
+  const r = await fetch(imageUrl(url), { signal });
+  if (!r.ok) throw new Error('image indisponible');
+  return r.blob();
+}
+
 /** Exécute fn sur chaque élément avec au plus `limit` appels simultanés, en gardant l'ordre. */
 export async function mapLimit<T, R>(xs: T[], limit: number, fn: (x: T, i: number) => Promise<R>): Promise<R[]> {
   const out = new Array<R>(xs.length);

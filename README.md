@@ -28,6 +28,10 @@ côté serveur : la mettre dans `.env.local` (voir `.env.example`, ignoré par g
 
 Ajouter un service : écrire un module dans `server/` qui exporte des `Route[]` (voir `server/deezer.ts`),
 l'ajouter dans `server/routes.ts`, puis l'appeler depuis le front avec `apiGet()` (`src/lib/api.ts`).
+Pour une simple catégorie « recherche → vignettes », préférer un catalogue (ci-dessous).
+
+Toutes les images externes passent par un relais unique, `GET /api/image?url=` (`server/media.ts`), limité aux domaines
+déclarés par chaque module (redirections revérifiées à chaque étape).
 
 ### Musique (Deezer)
 
@@ -37,12 +41,29 @@ Source : l'API publique Deezer (https://developers.deezer.com/api), gratuite, sa
 Quota : 50 requêtes par 5 secondes, géré par le serveur (attente et nouvel essai).
 
 Routes : `GET /api/music/artists?q=`, `/api/music/artists/:id/albums?groups=album,single`,
-`/api/music/albums/:id/tracks`, `/api/music/image?url=` (relais des pochettes, limité aux domaines Deezer).
+`/api/music/albums/:id/tracks`.
+
+### Catalogues (Pokémon, anime, manga, personnages, livres)
+
+Bouton **Catalogues** dans le dock : choix d'une catégorie, recherche ou liste prédéfinie (génération Pokémon, top 100…),
+cases à cocher (la sélection est conservée d'une recherche et d'une catégorie à l'autre), puis import en vignettes image + nom.
+Sources publiques, sans clé :
+
+| Catégorie | Source | Module |
+|---|---|---|
+| Pokémon | Tyradex (https://tyradex.app), noms en français | `server/tyradex.ts` |
+| Anime, manga, personnages | AniList, API GraphQL officielle (https://docs.anilist.co), 30 req/min | `server/anilist.ts` |
+| Livres | Open Library (https://openlibrary.org) | `server/openlibrary.ts` |
+
+Toutes les catégories partagent le même contrat (`shared/catalog.ts`) et les mêmes routes :
+`GET /api/catalog/:source/search?q=` et `/api/catalog/:source/lists/:list`, qui renvoient `{ hits: CatalogHit[] }`.
+Ajouter une catégorie : une entrée dans `CATALOGS` (`shared/catalog.ts`), un module serveur qui implémente `CatalogSource`
+(`search`, `list` facultatif, domaines d'images), et son enregistrement dans `server/routes.ts`. La modale n'a pas à changer.
 
 ## Structure
 
 ```
-server/                    API côté serveur : routeur /api, musique (Deezer), Worker Cloudflare, adaptateur Vite
+server/                    API côté serveur : routeur /api, relais d'images, musique (Deezer), catalogues, Worker, adaptateur Vite
 shared/                    types partagés serveur / navigateur
 src/
   main.ts, App.svelte      point d'entrée, routage #/ et #/list/<id>
@@ -54,7 +75,8 @@ src/
     drag.ts                glisser-déposer souris et tactile (Pointer Events)
     images.ts              réduction des images en Blob WebP, URLs objet
     api.ts                 client /api (erreurs, appels parallèles limités)
-    music.ts               recherche d'artiste, discographie, titres, pochettes
+    music.ts               recherche d'artiste, discographie, titres
+    catalog.ts             catalogues : recherche et listes prédéfinies
     share.ts               code de partage JSON (compatible avec le prototype)
     exportImage.ts         export PNG via canvas
     effects.ts             confettis
@@ -64,7 +86,7 @@ src/
     EditorPage.svelte      chargement d'une liste depuis IndexedDB
     Editor.svelte          éditeur : en-tête, rangs, clavier, collage, dépôt de fichiers
     Row, Zone, Tile, Dock, Swatches, Modal, Icon
-    modals/                rang, vignette, partage, export, nouvelle liste, import, musique
+    modals/                rang, vignette, partage, export, nouvelle liste, import, musique, catalogues
 ```
 
 ## Stockage

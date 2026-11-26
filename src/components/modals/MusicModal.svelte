@@ -1,14 +1,12 @@
 <script lang="ts">
   import { onDestroy } from 'svelte';
-  import { mapLimit } from '../../lib/api';
+  import { fetchImage, imageUrl, mapLimit } from '../../lib/api';
   import { LIMITS } from '../../lib/constants';
   import type { Editor } from '../../lib/editor.svelte';
   import { shrink } from '../../lib/images';
   import {
     albumTracks,
     artistAlbums,
-    fetchImage,
-    imageUrl,
     searchArtists,
     type AlbumGroup,
     type AlbumInfo,

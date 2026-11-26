@@ -9,6 +9,7 @@
     ed,
     onfiles,
     onmusic,
+    oncatalog,
     ontexts,
     onedit,
     ondelete,
@@ -16,6 +17,7 @@
     ed: Editor;
     onfiles: (files: FileList) => void;
     onmusic: () => void;
+    oncatalog: () => void;
     ontexts: (text: string) => void;
     onedit: () => void;
     ondelete: () => void;
@@ -30,6 +32,7 @@
   <div class="dock-h">
     <button class="btn pri" onclick={() => fileInput.click()}><Icon name="img" />Importer des images</button>
     <button class="btn" onclick={onmusic} title="Importer une discographie (Deezer)"><Icon name="music" />Musique</button>
+    <button class="btn" onclick={oncatalog} title="Importer depuis un catalogue (Pokémon, anime, livres…)"><Icon name="search" />Catalogues</button>
     <input
       bind:this={fileInput}
       type="file"

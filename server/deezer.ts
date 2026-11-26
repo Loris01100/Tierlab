@@ -1,5 +1,7 @@
 import type { AlbumGroup, AlbumInfo, ArtistHit, TrackInfo } from '../shared/music';
 import { HttpError, type Route } from './api';
+import { CACHE_LONG, CACHE_SHORT, sleep } from './http';
+import type { ImageHost } from './media';
 
 /**
  * Catalogue musical via l'API publique Deezer : gratuite, sans compte ni clé.
@@ -11,9 +13,8 @@ const API = 'https://api.deezer.com';
 const ID_RE = /^\d{1,15}$/;
 /** Taille de page maximale acceptée par Deezer. */
 const PAGE = 100;
-/** Le catalogue change peu : le navigateur peut réutiliser les réponses (moins d'appels, moins de quota consommé). */
-const CACHE_SHORT = 'public, max-age=3600';
-const CACHE_LONG = 'public, max-age=86400';
+/** Pochettes et photos d'artistes, relayées par /api/image (server/media.ts). */
+export const deezerImages: readonly ImageHost[] = [{ host: 'dzcdn.net', sub: true }];
 
 /* ---------- types bruts Deezer (champs utilisés seulement) ---------- */
 
@@ -45,8 +46,6 @@ interface DzTrack {
   disk_number?: number;
   track_position?: number;
 }
-
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** GET sur l'API Deezer. Deezer renvoie ses erreurs avec un statut 200 et un objet { error }. */
 async function dz<T>(pathOrUrl: string, params: Record<string, string | number> = {}): Promise<T> {
@@ -181,35 +180,6 @@ export const musicRoutes: Route[] = [
         number: t.track_position ?? 0,
       }));
       return { tracks };
-    },
-  },
-  {
-    // Relais des pochettes : même origine pour le navigateur (pas de souci CORS pour le canvas).
-    method: 'GET',
-    path: '/music/image',
-    async handler({ query }) {
-      let u: URL;
-      try {
-        u = new URL(query.get('url') ?? '');
-      } catch {
-        throw new HttpError(400, 'URL d’image invalide');
-      }
-      if (u.protocol !== 'https:' || !u.hostname.endsWith('.dzcdn.net')) throw new HttpError(400, 'Seules les images Deezer sont relayées');
-      // redirect: 'manual' (les Workers refusent 'error') : une redirection n'est pas « ok », donc refusée plus bas.
-      const r = await fetch(u, { redirect: 'manual' }).catch(() => null);
-      if (!r) throw new HttpError(502, 'Image indisponible');
-      const type = r.headers.get('Content-Type') ?? '';
-      const tooBig = Number(r.headers.get('Content-Length')) > 8_000_000;
-      if (!r.ok || !r.body || !type.startsWith('image/') || tooBig) {
-        // Libère la connexion sortante au lieu d'attendre que le corps non lu soit abandonné.
-        void r.body?.cancel().catch(() => {});
-        throw new HttpError(502, tooBig ? 'Image trop lourde' : 'Image indisponible');
-      }
-      // Les URL dzcdn contiennent l'empreinte de l'image : leur contenu ne change jamais.
-      return new Response(r.body, {
-        status: 200,
-        headers: { 'Content-Type': type, 'Cache-Control': 'public, max-age=2592000, immutable' },
-      });
     },
   },
 ];
