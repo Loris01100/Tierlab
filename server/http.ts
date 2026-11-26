@@ -54,11 +54,3 @@ export async function getJson<T>(url: URL, { service, host, retries = 2, body }:
     })) as T;
   }
 }
-
-/** Minuscules sans accents, pour comparer des noms saisis (« pokemon » trouve « Pokémon »). */
-export const fold = (s: string): string =>
-  s
-    .normalize('NFD')
-    .replace(/\p{Diacritic}/gu, '')
-    .toLocaleLowerCase()
-    .trim();

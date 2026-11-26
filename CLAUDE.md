@@ -34,7 +34,7 @@ To see the site: `npm run dev` then open http://localhost:5173. In VS Code, F5 (
 - Adding a service: new module in `server/` exporting `Route[]` (model: `server/deezer.ts`), register it in `server/routes.ts`, call it from the front with `apiGet()` (`src/lib/api.ts`).
 - `server/deezer.ts`: public Deezer API (no key), 50 req / 5 s quota handled server-side with wait-and-retry.
 - `server/media.ts`: the single image proxy `/api/image?url=`; each module declares its `ImageHost[]` allowlist (host, subdomains, path prefix), redirects are re-checked per hop.
-- `server/http.ts`: shared outgoing helpers (`getJson` with host check + bounded retry on 429/5xx, `sleep`, cache constants, `fold`).
+- `server/http.ts`: shared outgoing helpers (`getJson` with host check, User-Agent + bounded retry on 429/5xx, used by every source including Deezer; `sleep`, cache constants). Accent-folding search helper: `fold` in `shared/rules.ts`.
 - Catalogues (search → tiles): contract and category list in `shared/catalog.ts` (`CATALOGS`, `CatalogHit`); generic routes `/api/catalog/:source/search` and `/lists/:list` in `server/catalog.ts`; one `CatalogSource` per category (`server/tyradex.ts`, `anilist.ts` — GraphQL via `getJson({ body })`, `openlibrary.ts`), registered in `server/routes.ts` (typed `Record<CatalogId, …>`, so a missing one fails `npm run check`). Front: `src/lib/catalog.ts` + `CatalogModal.svelte` (single « Catalogues » dock button; Music is a special tab rendering `MusicPanel.svelte`, not a `CatalogSource`, because of its artist → releases → albums/tracks flow). Adding a category needs no front change.
 
 ### Live collaboration (several people on one list)

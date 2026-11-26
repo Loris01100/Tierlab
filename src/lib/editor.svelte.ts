@@ -171,8 +171,13 @@ export class Editor {
   moveTo(id: string, zone: string): boolean {
     const { list, index } = this.where(id);
     if (!list) return false;
-    const before = this.pool.length;
     const fromPool = list === this.pool;
+    // Déjà en dernière place de cette zone : rien ne bouge, donc ni étape d'annulation ni opération envoyée.
+    if (list === this.listOf(zone) && index === list.length - 1) {
+      this.selId = null;
+      return false;
+    }
+    const before = this.pool.length;
     this.commit();
     this.#run({ k: 'move', id, zone });
     // depuis la réserve : la sélection passe à la vignette suivante pour enchaîner au clavier

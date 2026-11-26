@@ -1,6 +1,6 @@
 import type { AlbumGroup, AlbumInfo, ArtistHit, TrackInfo } from '../shared/music';
 import { HttpError, type Route } from './api';
-import { CACHE_LONG, CACHE_SHORT, sleep } from './http';
+import { CACHE_LONG, CACHE_SHORT, getJson, sleep } from './http';
 import type { ImageHost } from './media';
 
 /**
@@ -9,7 +9,8 @@ import type { ImageHost } from './media';
  * Quota : 50 requêtes par tranche de 5 secondes et par IP (on patiente et on réessaie si dépassé).
  */
 
-const API = 'https://api.deezer.com';
+const HOST = 'api.deezer.com';
+const API = `https://${HOST}`;
 const ID_RE = /^\d{1,15}$/;
 /** Taille de page maximale acceptée par Deezer. */
 const PAGE = 100;
@@ -47,27 +48,17 @@ interface DzTrack {
   track_position?: number;
 }
 
-/** GET sur l'API Deezer. Deezer renvoie ses erreurs avec un statut 200 et un objet { error }. */
+/**
+ * GET sur l'API Deezer, via getJson (contrôle de l'hôte, User-Agent, réessais sur 429 / 5xx).
+ * Deezer renvoie en plus ses erreurs avec un statut 200 et un objet { error }, traité ici.
+ */
 async function dz<T>(pathOrUrl: string, params: Record<string, string | number> = {}): Promise<T> {
   const url = new URL(pathOrUrl, API);
+  // Les liens `next` de Deezer peuvent être en http.
   url.protocol = 'https:';
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, String(v));
-  if (url.host !== 'api.deezer.com') throw new HttpError(500, 'URL Deezer inattendue');
   for (let attempt = 0; ; attempt++) {
-    let r: Response;
-    try {
-      r = await fetch(url);
-    } catch {
-      throw new HttpError(502, 'Deezer injoignable');
-    }
-    if (r.status >= 500 && attempt < 2) {
-      await sleep(1000);
-      continue;
-    }
-    if (!r.ok) throw new HttpError(502, `Deezer a répondu ${r.status}`);
-    const d = (await r.json().catch(() => {
-      throw new HttpError(502, 'Réponse Deezer illisible');
-    })) as T | DzError;
+    const d = await getJson<T | DzError>(url, { service: 'Deezer', host: HOST });
     if (d && typeof d === 'object' && 'error' in d) {
       const { code, message } = d.error;
       if (code === 4 && attempt < 3) {

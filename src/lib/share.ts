@@ -1,6 +1,6 @@
 import { LIMITS } from './constants';
 import { saveList } from './db';
-import { blobToDataURL, dataURLToBlob } from './images';
+import { blobToDataURL, dataURLToBlob, shrink } from './images';
 import type { Item, Tier } from './types';
 import { fgFor, isColor, uid } from './utils';
 
@@ -64,14 +64,17 @@ export async function fromShared(raw: unknown, listId: string): Promise<Imported
 
   const map = new Map<string, string>();
   const items: Item[] = [];
+  let images = 0;
   for (const [k, v] of Object.entries(d.items)) {
     if (!v || typeof v !== 'object') continue;
-    const text = String(v.text ?? '').slice(0, 200);
+    const text = String(v.text ?? '').slice(0, LIMITS.tileText);
     const id = uid();
     if (v.type === 'img') {
-      if (typeof v.src !== 'string' || !IMG_SRC.test(v.src)) continue;
+      if (typeof v.src !== 'string' || !IMG_SRC.test(v.src) || images >= LIMITS.importImages) continue;
       try {
-        items.push({ id, listId, type: 'img', text, blob: await dataURLToBlob(v.src) });
+        // Un code peut venir d'ailleurs (prototype, autre appareil) : images réduites comme un import de fichier.
+        items.push({ id, listId, type: 'img', text, blob: await shrink(await dataURLToBlob(v.src)) });
+        images++;
       } catch {
         continue;
       }

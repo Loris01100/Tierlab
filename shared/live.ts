@@ -20,7 +20,7 @@ export const LIVE = {
   image: 512 * 1024,
   /** Taille maximale d'un message WebSocket ou du corps de création (caractères). */
   message: 512 * 1024,
-  /** Longueur maximale d'un texte de vignette (même borne que l'import d'un code). */
+  /** Longueur maximale d'un texte de vignette côté serveur (plafond de sécurité, plus large que LIMITS.tileText). */
   text: 200,
 } as const;
 

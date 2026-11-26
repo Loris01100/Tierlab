@@ -1,7 +1,8 @@
 import type { CatalogHit } from '../shared/catalog';
 import { HttpError } from './api';
 import type { CatalogSource } from './catalog';
-import { fold, getJson } from './http';
+import { getJson } from './http';
+import { fold } from '../shared/rules';
 
 /**
  * Pokémon via Tyradex : API publique française, gratuite, sans clé (noms en français et en anglais).

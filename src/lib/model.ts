@@ -27,7 +27,7 @@ export function sampleList(): { list: TierList; items: Item[] } {
   const items: Item[] = [];
   const put = (target: string[], texts: string[]) =>
     texts.forEach((t, i) => {
-      const it = textItem(list.id, t, TILE_COLORS[(t.length + i) % 7]);
+      const it = textItem(list.id, t, TILE_COLORS[(t.length + i) % TILE_COLORS.length]);
       items.push(it);
       target.push(it.id);
     });

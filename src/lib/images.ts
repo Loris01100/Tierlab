@@ -23,7 +23,10 @@ export function releaseUrls(): void {
 const toBlob = (c: HTMLCanvasElement, type: string, q?: number) =>
   new Promise<Blob | null>((res) => c.toBlob(res, type, q));
 
-/** Réduit une image (320 px max par défaut) et la ré-encode en WebP, ou PNG si WebP indisponible. */
+/**
+ * Réduit une image (320 px max par défaut) et la ré-encode en WebP, ou PNG si WebP indisponible.
+ * Un WebP déjà assez petit est gardé tel quel : le ré-encoder ne ferait que perdre en qualité (import d'un code, copie communautaire).
+ */
 export function shrink(file: Blob, max = 320): Promise<Blob> {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
@@ -31,6 +34,7 @@ export function shrink(file: Blob, max = 320): Promise<Blob> {
     im.onload = async () => {
       URL.revokeObjectURL(url);
       const k = Math.min(1, max / Math.max(im.width, im.height));
+      if (k === 1 && file.type === 'image/webp') return resolve(file);
       const c = document.createElement('canvas');
       c.width = Math.max(1, Math.round(im.width * k));
       c.height = Math.max(1, Math.round(im.height * k));
