@@ -13,7 +13,7 @@ let ctx: CanvasRenderingContext2D | null = null;
 let parts: Part[] = [];
 let running = false;
 
-function setup(): CanvasRenderingContext2D {
+function ensureCanvas(): CanvasRenderingContext2D {
   if (ctx) return ctx;
   canvas = document.createElement('canvas');
   canvas.className = 'fx';
@@ -30,7 +30,7 @@ function setup(): CanvasRenderingContext2D {
   return ctx;
 }
 
-function star(c: CanvasRenderingContext2D, r: number) {
+function drawStar(c: CanvasRenderingContext2D, r: number) {
   c.beginPath();
   for (let i = 0; i < 10; i++) {
     const a = (i * Math.PI) / 5 - Math.PI / 2;
@@ -41,7 +41,7 @@ function star(c: CanvasRenderingContext2D, r: number) {
   c.fill();
 }
 
-function step() {
+function drawFrame() {
   const c = ctx!;
   c.clearRect(0, 0, innerWidth, innerHeight);
   parts = parts.filter((p) => p.life > 0 && p.y < innerHeight + 40);
@@ -52,11 +52,11 @@ function step() {
     c.translate(p.x, p.y);
     c.rotate(p.r);
     c.fillStyle = p.c;
-    if (p.star) star(c, p.w * 0.8);
+    if (p.star) drawStar(c, p.w * 0.8);
     else c.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
     c.restore();
   }
-  if (parts.length) requestAnimationFrame(step);
+  if (parts.length) requestAnimationFrame(drawFrame);
   else {
     running = false;
     c.clearRect(0, 0, innerWidth, innerHeight);
@@ -65,7 +65,7 @@ function step() {
 
 export function burst(x: number, y: number, cols: string[], n = 22, pw = 1): void {
   if (reducedMotion()) return;
-  setup();
+  ensureCanvas();
   for (let i = 0; i < n; i++) {
     const a = Math.random() * Math.PI * 2;
     const v = (1.5 + Math.random() * 5) * pw;
@@ -78,7 +78,7 @@ export function burst(x: number, y: number, cols: string[], n = 22, pw = 1): voi
   }
   if (!running) {
     running = true;
-    requestAnimationFrame(step);
+    requestAnimationFrame(drawFrame);
   }
 }
 

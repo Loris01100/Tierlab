@@ -24,7 +24,7 @@ export function isAllowed(u: URL, hosts: readonly ImageHost[]): boolean {
   );
 }
 
-function parse(raw: string | null): URL {
+function parseImageUrl(raw: string | null): URL {
   try {
     return new URL(raw ?? '');
   } catch {
@@ -38,7 +38,7 @@ export function imageRoutes(hosts: readonly ImageHost[]): Route[] {
       method: 'GET',
       path: '/image',
       async handler({ query }) {
-        let u = parse(query.get('url'));
+        let u = parseImageUrl(query.get('url'));
         for (let hop = 0; ; hop++) {
           if (!isAllowed(u, hosts)) throw new HttpError(400, 'Domaine d’image non autorisé');
           // redirect: 'manual' (les Workers refusent 'error') : on suit nous-mêmes pour vérifier chaque destination.

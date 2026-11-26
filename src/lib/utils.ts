@@ -6,12 +6,12 @@ export function uid(): string {
 
 export { isColor } from '../../shared/rules';
 
-export const hex6 = (c: string): string =>
+export const expandHex = (c: string): string =>
   c.length === 4 ? '#' + [...c.slice(1)].map((x) => x + x).join('') : c;
 
 /** Texte noir ou blanc selon la luminance du fond. */
 export function fgFor(c: string): string {
-  const h = hex6(c);
+  const h = expandHex(c);
   const r = parseInt(h.slice(1, 3), 16);
   const g = parseInt(h.slice(3, 5), 16);
   const b = parseInt(h.slice(5, 7), 16);
@@ -24,7 +24,7 @@ export const isTyping = (a: Element | null): boolean =>
 export const reducedMotion = (): boolean => matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 /** Lecture/écriture localStorage tolérante (navigation privée, stockage bloqué). */
-export function pref<T>(key: string, fallback: T): T {
+export function getPref<T>(key: string, fallback: T): T {
   try {
     const v = localStorage.getItem(key);
     return v === null ? fallback : (JSON.parse(v) as T);
@@ -49,7 +49,7 @@ const day = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short' })
 const dayYear = new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' });
 
 /** Date relative courte : « à l’instant », « il y a 5 min », « hier », puis « 22 nov. » (année si différente). */
-export function relTime(t: number, now = Date.now()): string {
+export function relativeTime(t: number, now = Date.now()): string {
   const s = Math.round((now - t) / 1000);
   if (s < 60) return 'à l’instant';
   if (s < 3600) return rel.format(-Math.floor(s / 60), 'minute');

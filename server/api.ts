@@ -39,7 +39,7 @@ export class HttpError extends Error {
 
 export const API_PREFIX = '/api';
 
-function compile(path: string): { re: RegExp; keys: string[] } {
+function compilePath(path: string): { re: RegExp; keys: string[] } {
   const keys: string[] = [];
   const src = path.replace(/\/:(\w+)/g, (_, k: string) => {
     keys.push(k);
@@ -66,7 +66,7 @@ function decodeParam(v: string): string {
 
 /** Renvoie un gestionnaire Request → Response pour les URL sous /api, ou null pour les autres. */
 export function createApi(routes: Route[]): (request: Request, env: Env) => Promise<Response | null> {
-  const table = routes.map((r) => ({ ...r, ...compile(r.path) }));
+  const table = routes.map((r) => ({ ...r, ...compilePath(r.path) }));
 
   return async (request, env) => {
     const url = new URL(request.url);

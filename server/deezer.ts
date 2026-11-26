@@ -52,7 +52,7 @@ interface DzTrack {
  * GET sur l'API Deezer, via getJson (contrôle de l'hôte, User-Agent, réessais sur 429 / 5xx).
  * Deezer renvoie en plus ses erreurs avec un statut 200 et un objet { error }, traité ici.
  */
-async function dz<T>(pathOrUrl: string, params: Record<string, string | number> = {}): Promise<T> {
+async function deezerGet<T>(pathOrUrl: string, params: Record<string, string | number> = {}): Promise<T> {
   const url = new URL(pathOrUrl, API);
   // Les liens `next` de Deezer peuvent être en http.
   url.protocol = 'https:';
@@ -79,18 +79,18 @@ async function dz<T>(pathOrUrl: string, params: Record<string, string | number> 
  * La première page donne `total` : les suivantes sont alors demandées en parallèle (au plus max / PAGE requêtes,
  * bien sous le quota) au lieu d'être enchaînées. Sans `total`, on suit les liens `next` un par un.
  */
-async function all<T>(path: string, max: number): Promise<T[]> {
-  const first = await dz<DzPage<T>>(path, { limit: PAGE, index: 0 });
+async function fetchAllPages<T>(path: string, max: number): Promise<T[]> {
+  const first = await deezerGet<DzPage<T>>(path, { limit: PAGE, index: 0 });
   const out = [...first.data];
   if (typeof first.total === 'number') {
     const end = Math.min(first.total, max);
     const rest: Promise<DzPage<T>>[] = [];
-    for (let index = PAGE; index < end; index += PAGE) rest.push(dz<DzPage<T>>(path, { limit: PAGE, index }));
+    for (let index = PAGE; index < end; index += PAGE) rest.push(deezerGet<DzPage<T>>(path, { limit: PAGE, index }));
     for (const p of await Promise.all(rest)) out.push(...p.data);
   } else {
     let next = first.next;
     while (next && out.length < max) {
-      const p: DzPage<T> = await dz<DzPage<T>>(next);
+      const p: DzPage<T> = await deezerGet<DzPage<T>>(next);
       out.push(...p.data);
       next = p.next;
     }
@@ -117,7 +117,7 @@ export const musicRoutes: Route[] = [
     async handler({ query }) {
       const q = (query.get('q') ?? '').trim().slice(0, 100);
       if (!q) return { artists: [] };
-      const d = await dz<DzPage<DzArtist>>('/search/artist', { limit: 10, q });
+      const d = await deezerGet<DzPage<DzArtist>>('/search/artist', { limit: 10, q });
       const artists: ArtistHit[] = d.data.map((a) => ({
         id: String(a.id),
         name: a.name,
@@ -135,7 +135,7 @@ export const musicRoutes: Route[] = [
       const id = checkId(params.id);
       const groups = new Set((query.get('groups') ?? 'album,single,compilation').split(',').filter((g) => GROUPS.has(g)));
       if (!groups.size) return { albums: [] };
-      const raw = await all<DzAlbum>(`/artist/${id}/albums`, 1000);
+      const raw = await fetchAllPages<DzAlbum>(`/artist/${id}/albums`, 1000);
       // Plusieurs éditions d'une même sortie sont fréquentes : on garde la plus récente.
       raw.sort((a, b) => (b.release_date ?? '').localeCompare(a.release_date ?? ''));
       const seen = new Set<string>();
@@ -163,7 +163,7 @@ export const musicRoutes: Route[] = [
     cache: CACHE_LONG,
     async handler({ params }) {
       const id = checkId(params.id);
-      const raw = await all<DzTrack>(`/album/${id}/tracks`, 300);
+      const raw = await fetchAllPages<DzTrack>(`/album/${id}/tracks`, 300);
       const tracks: TrackInfo[] = raw.map((t) => ({
         id: String(t.id),
         name: t.title,

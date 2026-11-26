@@ -31,7 +31,7 @@ interface Mon {
 
 let cache: { at: number; mons: Promise<Mon[]> } | null = null;
 
-async function load(): Promise<Mon[]> {
+async function fetchPokedex(): Promise<Mon[]> {
   const raw = await getJson<TxPokemon[]>(new URL(`https://${HOST}/api/v1/pokemon`), { service: 'Tyradex', host: HOST });
   if (!Array.isArray(raw)) throw new HttpError(502, 'Réponse Tyradex illisible');
   return raw
@@ -48,9 +48,9 @@ async function load(): Promise<Mon[]> {
     }));
 }
 
-function pokedex(): Promise<Mon[]> {
+function getPokedex(): Promise<Mon[]> {
   if (!cache || Date.now() - cache.at > TTL) {
-    const mons = load();
+    const mons = fetchPokedex();
     cache = { at: Date.now(), mons };
     // Un échec ne doit pas rester en cache : la requête suivante réessaiera.
     mons.catch(() => (cache = null));
@@ -63,7 +63,7 @@ export const pokemonSource: CatalogSource = {
 
   async search(q) {
     const term = fold(q);
-    const found = (await pokedex()).filter((m) => m.keys.some((k) => k.includes(term)));
+    const found = (await getPokedex()).filter((m) => m.keys.some((k) => k.includes(term)));
     // Les noms qui commencent par la saisie d'abord, puis l'ordre du Pokédex.
     const starts = (m: Mon) => (m.keys.some((k) => k.startsWith(term)) ? 0 : 1);
     return found
@@ -74,6 +74,6 @@ export const pokemonSource: CatalogSource = {
 
   async list(id) {
     const gen = Number(id.replace('gen', ''));
-    return (await pokedex()).filter((m) => m.gen === gen).map((m) => m.hit);
+    return (await getPokedex()).filter((m) => m.gen === gen).map((m) => m.hit);
   },
 };

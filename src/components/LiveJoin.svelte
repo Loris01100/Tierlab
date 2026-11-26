@@ -2,18 +2,18 @@
   import { ApiError, apiGet } from '../lib/api';
   import { findLive, saveList } from '../lib/db';
   import { newList } from '../lib/model';
-  import { go, listPath, replace } from '../lib/router.svelte';
+  import { go, listPath, replaceRoute } from '../lib/router.svelte';
 
   /** Lien #/live/<salle> : ouvre la copie locale reliée à cette salle, ou la crée (elle se remplit à la connexion). */
   let { room }: { room: string } = $props();
 
   const join = (async () => {
     const known = await findLive(room).catch(() => undefined);
-    if (known) return replace(listPath(known.id));
+    if (known) return replaceRoute(listPath(known.id));
     const { title } = await apiGet<{ title: string }>(`/live/${room}/info`);
     const list = { ...newList(title, []), live: room };
     await saveList(list);
-    replace(listPath(list.id));
+    replaceRoute(listPath(list.id));
   })();
 </script>
 

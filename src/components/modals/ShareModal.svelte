@@ -7,7 +7,7 @@
   import { communityPath, livePath } from '../../lib/router.svelte';
   import { toShared } from '../../lib/share';
   import { toast } from '../../lib/toast.svelte';
-  import { plural, pref, setPref } from '../../lib/utils';
+  import { getPref, plural, setPref } from '../../lib/utils';
   import Icon from '../Icon.svelte';
   import Modal from '../Modal.svelte';
 
@@ -19,7 +19,7 @@
   let linkIn = $state<HTMLInputElement>();
 
   /** Le code embarque toutes les images en base64 : il n'est calculé qu'à la demande, pas à chaque ouverture de la fenêtre. */
-  async function makeCode() {
+  async function generateCode() {
     coding = true;
     try {
       code = JSON.stringify(await toShared({ title: ed.title, tiers: ed.tiers, pool: ed.pool, items: ed.items }));
@@ -54,7 +54,7 @@
   let sent = $state<{ done: number; total: number } | null>(null);
   let confirmLeave = $state(false);
 
-  async function start() {
+  async function startLive() {
     busy = true;
     try {
       // Les modifications faites pendant l'envoi seraient perdues pour les autres : on fige d'abord la sauvegarde.
@@ -72,11 +72,11 @@
 
   /* ---------- communauté ---------- */
   const pub = $derived(published[ed.id]);
-  let author = $state(pref('tierlab-author', ''));
+  let author = $state(getPref('tierlab-author', ''));
   let pubBusy = $state(false);
   let confirmUnpub = $state(false);
 
-  async function sendPub() {
+  async function publishList() {
     pubBusy = true;
     setPref('tierlab-author', author.trim());
     try {
@@ -95,7 +95,7 @@
     }
   }
 
-  async function unpub() {
+  async function unpublishList() {
     confirmUnpub = false;
     pubBusy = true;
     try {
@@ -108,7 +108,7 @@
     }
   }
 
-  function leave() {
+  function leaveLive() {
     ed.leaveLive();
     confirmLeave = false;
     toast('Cette liste n’est plus synchronisée');
@@ -131,7 +131,7 @@
       <p class="small">Votre copie restera sur cet appareil mais ne recevra plus les modifications des autres.</p>
       <div class="foot start">
         <button class="btn sm" onclick={() => (confirmLeave = false)}>Garder la synchro</button>
-        <button class="btn sm pri danger-bg" onclick={leave}>Arrêter la synchro</button>
+        <button class="btn sm pri danger-bg" onclick={leaveLive}>Arrêter la synchro</button>
       </div>
     {:else}
       <div class="foot start"><button class="btn sm danger" onclick={() => (confirmLeave = true)}>Arrêter la synchro sur cet appareil</button></div>
@@ -139,7 +139,7 @@
   {:else}
     <p class="small">Créez un lien : chaque personne qui l’ouvre voit et modifie la même liste, en temps réel.</p>
     <div class="foot start">
-      <button class="btn pri" disabled={busy} onclick={start}>
+      <button class="btn pri" disabled={busy} onclick={startLive}>
         {#if sent && sent.total}Envoi des images… {sent.done}/{sent.total}{:else if busy}Création…{:else}Créer le lien partagé{/if}
       </button>
     </div>
@@ -156,14 +156,14 @@
   <label for="shAuthor">Pseudo affiché (facultatif)</label>
   <div class="linkrow">
     <input id="shAuthor" type="text" maxlength={COMMUNITY.author} placeholder="Anonyme" bind:value={author} />
-    <button class="btn" class:pri={!pub} disabled={pubBusy} onclick={sendPub}><Icon name="globe" />{pub ? 'Mettre à jour' : 'Publier'}</button>
+    <button class="btn" class:pri={!pub} disabled={pubBusy} onclick={publishList}><Icon name="globe" />{pub ? 'Mettre à jour' : 'Publier'}</button>
   </div>
   {#if pub}
     <div class="foot start">
       <a class="btn sm" href="#{communityPath(pub.id)}" onclick={onclose}>Voir la publication</a>
       {#if confirmUnpub}
         <button class="btn sm" onclick={() => (confirmUnpub = false)}>Garder</button>
-        <button class="btn sm pri danger-bg" disabled={pubBusy} onclick={unpub}>Retirer de la communauté</button>
+        <button class="btn sm pri danger-bg" disabled={pubBusy} onclick={unpublishList}>Retirer de la communauté</button>
       {:else}
         <button class="btn sm danger" disabled={pubBusy} onclick={() => (confirmUnpub = true)}>Retirer…</button>
       {/if}
@@ -182,7 +182,7 @@
     {#if code}
       <button class="btn" onclick={() => copy(code, out, 'Code copié')}>Copier le code</button>
     {:else}
-      <button class="btn" disabled={coding} onclick={makeCode}>{coding ? 'Préparation…' : 'Générer le code'}</button>
+      <button class="btn" disabled={coding} onclick={generateCode}>{coding ? 'Préparation…' : 'Générer le code'}</button>
     {/if}
   </div>
 </Modal>

@@ -108,7 +108,7 @@
   onDestroy(() => abort.abort());
 
   /** Pochette réduite, ou undefined si indisponible (la vignette devient alors du texte). */
-  async function cover(a: AlbumInfo): Promise<Blob | undefined> {
+  async function fetchCover(a: AlbumInfo): Promise<Blob | undefined> {
     if (!a.image) return undefined;
     try {
       return await shrink(await fetchImage(a.image, abort.signal));
@@ -117,7 +117,7 @@
     }
   }
 
-  async function run() {
+  async function addPicked() {
     if (!artist || !chosen.length || tooMany || busy) return;
     busy = true;
     let done = 0;
@@ -125,7 +125,7 @@
     progress = `Récupération 0/${total}…`;
     try {
       const perAlbum = await mapLimit(chosen, 4, async (a) => {
-        const [blob, tracks] = await Promise.all([cover(a), mode === 'tracks' ? albumTracks(a.id, abort.signal) : Promise.resolve(null)]);
+        const [blob, tracks] = await Promise.all([fetchCover(a), mode === 'tracks' ? albumTracks(a.id, abort.signal) : Promise.resolve(null)]);
         progress = `Récupération ${++done}/${total}…`;
         return tracks ? tracks.map((t) => ({ text: t.name, blob })) : [{ text: a.name, blob }];
       });
@@ -216,7 +216,7 @@
   <div class="foot">
     <button class="btn l" onclick={() => ((artist = null), (albums = []))} disabled={busy}>Changer d’artiste</button>
     <button class="btn" onclick={onclose}>Annuler</button>
-    <button class="btn pri" onclick={run} disabled={busy || loading || !chosen.length || tooMany}>
+    <button class="btn pri" onclick={addPicked} disabled={busy || loading || !chosen.length || tooMany}>
       {busy ? 'Import…' : mode === 'tracks' ? `Ajouter les titres (${plural(chosen.length, 'sortie')})` : `Ajouter ${plural(chosen.length, 'vignette')}`}
     </button>
   </div>

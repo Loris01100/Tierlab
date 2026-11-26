@@ -22,7 +22,7 @@
 
   let input: HTMLInputElement;
 
-  function final(): ItemDraft | null {
+  function finalDraft(): ItemDraft | null {
     const t = text.trim().slice(0, LIMITS.tileText);
     if (type === 'text' && !t) {
       input.focus();
@@ -31,19 +31,19 @@
     return { ...draft, text: t };
   }
   function save() {
-    const d = final();
+    const d = finalDraft();
     if (!d) return;
     ed.replaceItem(itemId, d);
     onclose();
   }
-  function dup() {
-    const d = final();
+  function duplicate() {
+    const d = finalDraft();
     if (!d) return;
     ed.duplicateItem(itemId, d);
     onclose();
     toast('Vignette dupliquée');
   }
-  async function pick(e: Event & { currentTarget: HTMLInputElement }) {
+  async function pickImage(e: Event & { currentTarget: HTMLInputElement }) {
     const f = e.currentTarget.files?.[0];
     if (!f) return;
     try {
@@ -71,10 +71,10 @@
     <Swatches colors={TILE_COLORS} bind:value={bg} custom label="Couleur de fond" />
   {/if}
   <label for="eFile">{type === 'img' ? 'Remplacer l’image' : 'Ajouter une image (le texte passe sous l’image)'}</label>
-  <input type="file" id="eFile" accept="image/*" onchange={pick} />
+  <input type="file" id="eFile" accept="image/*" onchange={pickImage} />
   <div class="foot">
     <button class="btn danger l" onclick={ondelete}>Supprimer</button>
-    <button class="btn" onclick={dup}>Dupliquer</button>
+    <button class="btn" onclick={duplicate}>Dupliquer</button>
     <button class="btn" onclick={onclose}>Annuler</button>
     <button class="btn pri" onclick={save}>Enregistrer</button>
   </div>

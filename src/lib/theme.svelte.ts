@@ -1,11 +1,11 @@
-import { pref, setPref } from './utils';
+import { getPref, setPref } from './utils';
 
 /** Thème choisi : « auto » suit le système, les deux autres forcent `color-scheme` via `data-theme` sur <html>. */
 export type Theme = 'auto' | 'light' | 'dark';
 
 const ORDER: readonly Theme[] = ['auto', 'light', 'dark'];
 
-export const theme = $state({ value: pref<Theme>('tierlab-theme', 'auto') });
+export const theme = $state({ value: getPref<Theme>('tierlab-theme', 'auto') });
 
 function apply(t: Theme): void {
   if (t === 'auto') delete document.documentElement.dataset.theme;

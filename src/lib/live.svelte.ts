@@ -42,7 +42,7 @@ export const fromLive = (it: LiveItem, listId: string): Item =>
   it.type === 'img' ? { id: it.id, listId, type: 'img', text: it.text } : { id: it.id, listId, type: 'text', text: it.text, bg: it.bg, fg: fgFor(it.bg ?? '#3d5afe') };
 
 /** Envoie une image, avec deux nouvelles tentatives en cas d'échec réseau ou serveur. */
-async function upload(room: string, id: string, blob: Blob): Promise<boolean> {
+async function uploadImage(room: string, id: string, blob: Blob): Promise<boolean> {
   for (let i = 0; i < 3; i++) {
     try {
       await apiPost(imgPath(room, id), blob);
@@ -68,7 +68,7 @@ export async function createRoom(ed: Editor, progress: (done: number, total: num
   let done = 0;
   progress(0, imgs.length);
   const ok = await mapLimit(imgs, 4, async (it) => {
-    const r = await upload(room, it.id, it.blob);
+    const r = await uploadImage(room, it.id, it.blob);
     progress(++done, imgs.length);
     return r;
   });
@@ -142,7 +142,7 @@ export class LiveLink {
       return;
     }
     this.#uploads = this.#uploads.then(async () => {
-      const ok = await mapLimit(blobs, 4, (it) => upload(this.room, it.id, it.blob));
+      const ok = await mapLimit(blobs, 4, (it) => uploadImage(this.room, it.id, it.blob));
       if (ok.includes(false)) toast('Une image n’a pas pu être envoyée aux autres');
       p.ready = true;
       this.#flush();

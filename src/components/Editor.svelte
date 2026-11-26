@@ -9,7 +9,7 @@
   import { renderTierList } from '../lib/exportImage';
   import { go } from '../lib/router.svelte';
   import { toast } from '../lib/toast.svelte';
-  import { isTyping, plural, pref, reducedMotion, setPref } from '../lib/utils';
+  import { getPref, isTyping, plural, reducedMotion, setPref } from '../lib/utils';
   import Dock from './Dock.svelte';
   import Icon from './Icon.svelte';
   import Logo from './Logo.svelte';
@@ -38,7 +38,7 @@
   }
 
   /* ---------- taille des vignettes (préférence locale) ---------- */
-  let size = $state(pref('tierlab-size', innerWidth < 600 ? 64 : 84));
+  let size = $state(getPref('tierlab-size', innerWidth < 600 ? 64 : 84));
   $effect(() => {
     document.documentElement.style.setProperty('--t', size + 'px');
     setPref('tierlab-size', size);
@@ -54,7 +54,7 @@
   /* ---------- effets ---------- */
   const tileEl = (id: string) => document.querySelector<HTMLElement>(`main .tile[data-id="${CSS.escape(id)}"]`);
 
-  async function landFx(id: string, delay = 0) {
+  async function playLandFx(id: string, delay = 0) {
     await tick();
     setTimeout(() => {
       const el = tileEl(id);
@@ -84,20 +84,20 @@
   /* ---------- actions ---------- */
   function place(id: string, zone: string) {
     const done = ed.moveTo(id, zone);
-    landFx(id, reducedMotion() ? 0 : 230);
+    playLandFx(id, reducedMotion() ? 0 : 230);
     celebrate(done);
   }
-  function delSel() {
+  function deleteSelected() {
     if (!ed.selId) return;
     poof(tileEl(ed.selId));
     ed.remove(ed.selId);
-    toast(deletedMsg());
+    toast(deletedMessage());
   }
   function undo() {
     if (ed.undo()) toast('Action annulée');
     else if (ed.live) toast('Annulation indisponible en édition partagée');
   }
-  const deletedMsg = () => (ed.live ? 'Vignette supprimée' : 'Vignette supprimée (Ctrl+Z pour annuler)');
+  const deletedMessage = () => (ed.live ? 'Vignette supprimée' : 'Vignette supprimée (Ctrl+Z pour annuler)');
 
   /* ---------- édition partagée ---------- */
   const liveLabel = $derived.by(() => {
@@ -118,7 +118,7 @@
     const n = ed.addTexts(str, zone);
     if (n) toast(`${plural(n, 'vignette')} ajoutée${n > 1 ? 's' : ''}`);
   }
-  async function focusLab(id: string) {
+  async function focusTierLabel(id: string) {
     await tick();
     const l = document.querySelector<HTMLElement>(`.lab[data-t="${id}"]`);
     if (l) {
@@ -169,7 +169,7 @@
     const detach = attachDrag(ed, {
       blocked: () => modal !== null,
       landed: (id, done) => {
-        landFx(id);
+        playLandFx(id);
         celebrate(done);
       },
       trashed: (g) => {
@@ -189,7 +189,7 @@
           void tr.offsetWidth;
           tr.classList.add('gulp');
         };
-        toast(deletedMsg());
+        toast(deletedMessage());
       },
     });
     const hide = () => document.visibilityState === 'hidden' && void ed.flush();
@@ -227,7 +227,7 @@
       else if (ed.tiers[n - 1]) place(sel, ed.tiers[n - 1].id);
     } else if (e.key === 'Delete' || e.key === 'Backspace') {
       e.preventDefault();
-      delSel();
+      deleteSelected();
     } else if (e.key === 'Enter' || e.key.toLowerCase() === 'e') {
       e.preventDefault();
       modal = { kind: 'tile', id: sel };
@@ -356,7 +356,7 @@
       </div>
     {/each}
   </div>
-  <button class="btn addrow" onclick={() => focusLab(ed.addTier())}><Icon name="plus" />Ajouter un rang</button>
+  <button class="btn addrow" onclick={() => focusTierLabel(ed.addTier())}><Icon name="plus" />Ajouter un rang</button>
 
   <Dock
     {ed}
@@ -364,14 +364,14 @@
     oncatalog={() => (modal = { kind: 'catalog' })}
     ontexts={(t) => addTexts(t)}
     onedit={() => ed.selId && (modal = { kind: 'tile', id: ed.selId })}
-    ondelete={delSel}
+    ondelete={deleteSelected}
   />
 </main>
 
 {#if dropShown}<div class="dropzone">Déposez vos images</div>{/if}
 
 {#if modal?.kind === 'row'}
-  <RowModal {ed} tierId={modal.id} onclose={() => (modal = null)} onadded={focusLab} />
+  <RowModal {ed} tierId={modal.id} onclose={() => (modal = null)} onadded={focusTierLabel} />
 {:else if modal?.kind === 'tile'}
   <TileModal
     {ed}
@@ -379,7 +379,7 @@
     onclose={() => (modal = null)}
     ondelete={() => {
       modal = null;
-      delSel();
+      deleteSelected();
     }}
   />
 {:else if modal?.kind === 'catalog'}

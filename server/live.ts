@@ -8,15 +8,15 @@ import { LIVE, ROOM_RE } from '../shared/live';
  * Les requêtes sont transmises telles quelles à l'objet, qui lit l'action à la fin du chemin.
  */
 
-const stub = (ctx: Ctx, room: string): ObjectStub => objectStub(ctx.env, 'LIVE', room);
+const roomStub = (ctx: Ctx, room: string): ObjectStub => objectStub(ctx.env, 'LIVE', room);
 
-function roomOf(ctx: Ctx): ObjectStub {
+function checkedRoom(ctx: Ctx): ObjectStub {
   const room = ctx.params.room;
   if (!ROOM_RE.test(room)) throw new HttpError(404, 'Lien de partage invalide');
-  return stub(ctx, room);
+  return roomStub(ctx, room);
 }
 
-const forward = (ctx: Ctx): Promise<Response> => roomOf(ctx).fetch(ctx.request);
+const forward = (ctx: Ctx): Promise<Response> => checkedRoom(ctx).fetch(ctx.request);
 
 export const liveRoutes: Route[] = [
   {
@@ -26,7 +26,7 @@ export const liveRoutes: Route[] = [
       const body = await ctx.request.text();
       if (body.length > LIVE.message) throw new HttpError(413, 'Liste trop volumineuse');
       const room = randomId(32);
-      const r = await stub(ctx, room).fetch('https://room/init', { method: 'POST', body, headers: { 'Content-Type': 'application/json' } });
+      const r = await roomStub(ctx, room).fetch('https://room/init', { method: 'POST', body, headers: { 'Content-Type': 'application/json' } });
       if (!r.ok) return r;
       return { room };
     },

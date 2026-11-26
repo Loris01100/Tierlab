@@ -2,12 +2,12 @@
  * Routage minimal par hash : #/ (bibliothèque), #/community (galerie), #/community/<id> (liste publiée),
  * #/list/<id> (éditeur) et #/live/<salle> (lien d'édition partagée).
  */
-const read = (): string => location.hash.replace(/^#/, '') || '/';
+const currentPath = (): string => location.hash.replace(/^#/, '') || '/';
 
-export const route = $state({ path: read() });
+export const route = $state({ path: currentPath() });
 
 addEventListener('hashchange', () => {
-  route.path = read();
+  route.path = currentPath();
 });
 
 export function go(path: string): void {
@@ -15,7 +15,7 @@ export function go(path: string): void {
 }
 
 /** Change de page sans ajouter d'entrée à l'historique (replaceState ne déclenche pas hashchange). */
-export function replace(path: string): void {
+export function replaceRoute(path: string): void {
   history.replaceState(null, '', `#${path}`);
   route.path = path;
 }

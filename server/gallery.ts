@@ -104,7 +104,7 @@ export class Gallery {
       COMMUNITY.page + 1,
       page * COMMUNITY.page,
     );
-    return { lists: rows.slice(0, COMMUNITY.page).map(card), more: rows.length > COMMUNITY.page && page < COMMUNITY.pages - 1 };
+    return { lists: rows.slice(0, COMMUNITY.page).map(toCard), more: rows.length > COMMUNITY.page && page < COMMUNITY.pages - 1 };
   }
 
   /** Ligne d'une liste visible (non masquée par les signalements), ou 404. */
@@ -117,7 +117,7 @@ export class Gallery {
 
   #get(ctx: Ctx): CommunityList {
     const row = this.#visible(ctx.params.id, `${CARD_COLS}, board`);
-    return { ...card(row), board: JSON.parse(String(row.board)) as LiveBoard };
+    return { ...toCard(row), board: JSON.parse(String(row.board)) as LiveBoard };
   }
 
   #img(ctx: Ctx): Response {
@@ -143,7 +143,7 @@ export class Gallery {
       if (it.type === 'text') items[it.id] = { type: 'text', text: it.text, bg: it.bg };
       else {
         const img = images.get(it.id);
-        if (img) items[it.id] = { type: 'img', text: it.text, src: `data:${String(img.type)};base64,${base64(new Uint8Array(img.data as ArrayBuffer))}` };
+        if (img) items[it.id] = { type: 'img', text: it.text, src: `data:${String(img.type)};base64,${toBase64(new Uint8Array(img.data as ArrayBuffer))}` };
       }
     }
     return {
@@ -159,7 +159,7 @@ export class Gallery {
 
   async #publish(ctx: Ctx): Promise<Published> {
     const ip = await ipHash(ctx.request);
-    const data = clean(await readBody(ctx));
+    const data = cleanPublish(await readBody(ctx));
     const id = randomId(16);
     const token = randomId(32);
     const tokenHash = await sha256(token);
@@ -172,7 +172,7 @@ export class Gallery {
       `INSERT INTO list (id, title, author, search, board, preview, tiles, tiers, created, updated, token, ip)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       id,
-      ...listCols(data),
+      ...listColumns(data),
       now,
       now,
       tokenHash,
@@ -184,9 +184,9 @@ export class Gallery {
 
   async #update(ctx: Ctx): Promise<null> {
     const raw = await readBody(ctx);
-    const id = await this.#owned(ctx.params.id, raw.token);
-    const data = clean(raw);
-    this.#sql.exec('UPDATE list SET title = ?, author = ?, search = ?, board = ?, preview = ?, tiles = ?, tiers = ?, updated = ? WHERE id = ?', ...listCols(data), Date.now(), id);
+    const id = await this.#checkOwner(ctx.params.id, raw.token);
+    const data = cleanPublish(raw);
+    this.#sql.exec('UPDATE list SET title = ?, author = ?, search = ?, board = ?, preview = ?, tiles = ?, tiers = ?, updated = ? WHERE id = ?', ...listColumns(data), Date.now(), id);
     this.#sql.exec('DELETE FROM img WHERE list = ?', id);
     this.#putImages(id, data.images);
     return null;
@@ -194,7 +194,7 @@ export class Gallery {
 
   async #remove(ctx: Ctx): Promise<null> {
     const raw = await readBody(ctx);
-    const id = await this.#owned(ctx.params.id, raw.token);
+    const id = await this.#checkOwner(ctx.params.id, raw.token);
     for (const t of ['list WHERE id', 'img WHERE list', 'mark WHERE list']) this.#sql.exec(`DELETE FROM ${t} = ?`, id);
     return null;
   }
@@ -209,7 +209,7 @@ export class Gallery {
   }
 
   /** Vérifie le jeton de l'auteur (ou ADMIN_TOKEN) ; renvoie l'id de la liste. */
-  async #owned(id: string, token: unknown): Promise<string> {
+  async #checkOwner(id: string, token: unknown): Promise<string> {
     const row = PUB_RE.test(id) ? this.#rows('SELECT token FROM list WHERE id = ?', id)[0] : undefined;
     if (!row) throw new HttpError(404, 'Cette liste n’existe pas ou a été retirée');
     if (typeof token !== 'string' || !token) throw new HttpError(403, 'Seul l’appareil qui a publié cette liste peut la modifier');
@@ -267,14 +267,14 @@ function isImage(type: string, d: Uint8Array): boolean {
   return at(0, 0x52, 0x49, 0x46, 0x46) && at(8, 0x57, 0x45, 0x42, 0x50);
 }
 
-function base64(bytes: Uint8Array): string {
+function toBase64(bytes: Uint8Array): string {
   let s = '';
   for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
   return btoa(s);
 }
 
 /** Valide un corps de publication (données non fiables) : liste au format d'échange + pseudo. */
-function clean(raw: Raw): Cleaned {
+function cleanPublish(raw: Raw): Cleaned {
   const l = isObj(raw.list) ? raw.list : null;
   if (!l || !Array.isArray(l.tiers) || !isObj(l.items)) throw new HttpError(400, 'Liste invalide');
   const items: LiveItem[] = [];
@@ -301,7 +301,7 @@ function clean(raw: Raw): Cleaned {
 }
 
 /** Colonnes title, author, search, board, preview, tiles, tiers (dans cet ordre). */
-function listCols({ author, board }: Cleaned): unknown[] {
+function listColumns({ author, board }: Cleaned): unknown[] {
   const byId = new Map(board.items.map((i) => [i.id, i]));
   const preview: PreviewTier[] = board.tiers.slice(0, COMMUNITY.previewTiers).map((t) => ({
     name: t.name,
@@ -315,7 +315,7 @@ function listCols({ author, board }: Cleaned): unknown[] {
   return [title, author, fold(`${title} ${author}`), JSON.stringify({ ...board, title }), JSON.stringify(preview), board.items.length, board.tiers.length];
 }
 
-function card(r: Record<string, unknown>): CommunityCard {
+function toCard(r: Record<string, unknown>): CommunityCard {
   return {
     id: String(r.id),
     title: String(r.title),

@@ -3,7 +3,7 @@ import type { Item, Tier, TierList } from './types';
 import { fgFor, uid } from './utils';
 
 /** Crée des rangs avec un dégradé de couleurs du rouge au bleu. */
-export function mkTiers(names: string[]): Tier[] {
+export function makeTiers(names: string[]): Tier[] {
   return names.map((name, i) => ({
     id: uid(),
     name,
@@ -14,7 +14,7 @@ export function mkTiers(names: string[]): Tier[] {
 
 export function newList(title: string, tierNames: string[]): TierList {
   const now = Date.now();
-  return { id: uid(), title, tiers: mkTiers(tierNames), pool: [], createdAt: now, updatedAt: now };
+  return { id: uid(), title, tiers: makeTiers(tierNames), pool: [], createdAt: now, updatedAt: now };
 }
 
 export function textItem(listId: string, text: string, bg: string): Item {

@@ -3,7 +3,7 @@ import { fgFor } from './utils';
 
 /** Rendu de la tier liste dans un canvas PNG (indépendant du DOM). */
 
-function wrap(x: CanvasRenderingContext2D, txt: string, mw: number): string[] {
+function wrapText(x: CanvasRenderingContext2D, txt: string, mw: number): string[] {
   const out: string[] = [];
   for (const para of String(txt).split('\n')) {
     let line = '';
@@ -35,7 +35,7 @@ function fitText(
 ) {
   for (let s = max; s >= 10; s -= 2) {
     x.font = `${wt} ${s}px Rubik, sans-serif`;
-    const lines = wrap(x, txt, mw);
+    const lines = wrapText(x, txt, mw);
     const lh = s * 1.12;
     const wordsFit = String(txt).split(/\s+/).every((w) => x.measureText(w).width <= mw);
     if ((lines.length * lh <= mh && wordsFit) || s <= 11) {
@@ -50,7 +50,7 @@ function fitText(
 }
 
 /** Décode l'image d'une vignette ; null si elle est absente ou illisible (case vide). */
-async function decode(it: Item | undefined): Promise<ImageBitmap | null> {
+async function decodeImage(it: Item | undefined): Promise<ImageBitmap | null> {
   if (it?.type !== 'img' || !it.blob) return null;
   try {
     return await createImageBitmap(it.blob);
@@ -124,7 +124,7 @@ export async function renderTierList(title: string, tiers: Tier[], items: Record
     fitText(x, t.name, M + LW / 2, y + h / 2, LW - 16, h - 16, fgFor(t.color), 42, 800);
     for (let b = 0; b < t.items.length; b += BATCH) {
       const ids = t.items.slice(b, b + BATCH);
-      const ims = await Promise.all(ids.map((id) => decode(items[id])));
+      const ims = await Promise.all(ids.map((id) => decodeImage(items[id])));
       ids.forEach((id, k) => {
         const j = b + k;
         drawTile(x, items[id], ims[k], M + LW + G + (j % COLS) * (s + G), y + G + Math.floor(j / COLS) * (cellH(t) + G), s);

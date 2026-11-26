@@ -12,7 +12,7 @@
   import { cycleTheme, theme, THEME_LABEL } from '../lib/theme.svelte';
   import { toast } from '../lib/toast.svelte';
   import type { Item, TierList } from '../lib/types';
-  import { fold, isTyping, plural, pref, relTime, setPref } from '../lib/utils';
+  import { fold, getPref, isTyping, plural, relativeTime, setPref } from '../lib/utils';
   import CommunityGrid from './CommunityGrid.svelte';
   import Icon from './Icon.svelte';
   import Logo from './Logo.svelte';
@@ -55,8 +55,8 @@
   /** Id de la liste dont le menu « ⋮ » est ouvert. */
   let menu = $state<string | null>(null);
   let q = $state('');
-  let sort = $state<Sort>(pref('tierlab-sort', 'recent'));
-  let csort = $state<CommunitySort>(pref('tierlab-csort', 'recent'));
+  let sort = $state<Sort>(getPref('tierlab-sort', 'recent'));
+  let csort = $state<CommunitySort>(getPref('tierlab-csort', 'recent'));
   let search = $state<HTMLInputElement>();
 
   const shown = $derived.by(() => {
@@ -73,7 +73,7 @@
     setPref('tierlab-sort', s);
   }
 
-  function setCsort(s: CommunitySort) {
+  function setCommunitySort(s: CommunitySort) {
     csort = s;
     setPref('tierlab-csort', s);
   }
@@ -90,7 +90,7 @@
   onMount(async () => {
     try {
       await refresh();
-      if (lists!.length || pref('tierlab-seeded', false)) return;
+      if (lists!.length || getPref('tierlab-seeded', false)) return;
       // Premier lancement : reprend la liste du prototype (MainList_v1.html, même origine) ou crée l'exemple.
       let migrated = false;
       try {
@@ -119,7 +119,7 @@
     go(listPath(l.id));
   }
 
-  async function quick(t: Quick) {
+  async function quickStart(t: Quick) {
     try {
       if ('preset' in t) return await create('Ma tier liste', PRESETS[t.preset].tiers);
       pendingCatalog.tab = t.catalog;
@@ -144,7 +144,7 @@
   }
 
   /** Code de partage d'une liste enregistrée (vignettes lues depuis IndexedDB). */
-  async function sharedOf(l: TierList) {
+  async function loadShared(l: TierList) {
     const data = await loadList(l.id);
     if (!data) return null;
     const items = Object.fromEntries(data.items.map((i) => [i.id, i]));
@@ -153,7 +153,7 @@
 
   async function duplicate(l: TierList) {
     menu = null;
-    const shared = await sharedOf(l);
+    const shared = await loadShared(l);
     const id = shared && (await saveShared(shared, `${l.title || 'Sans titre'} (copie)`));
     if (id) {
       toast('Liste dupliquée');
@@ -164,7 +164,7 @@
   async function copyCode(l: TierList) {
     menu = null;
     try {
-      const shared = await sharedOf(l);
+      const shared = await loadShared(l);
       if (!shared) return;
       await navigator.clipboard.writeText(JSON.stringify(shared));
       toast('Code de partage copié');
@@ -180,7 +180,7 @@
     await refresh();
   }
 
-  function onwinclick(e: MouseEvent) {
+  function onwindowclick(e: MouseEvent) {
     if (menu && !(e.target as Element).closest('.lmenu, .lmore')) menu = null;
   }
 
@@ -193,7 +193,7 @@
   }
 </script>
 
-<svelte:window onclick={onwinclick} {onkeydown} />
+<svelte:window onclick={onwindowclick} {onkeydown} />
 
 <header class="top">
   <div class="brand">
@@ -227,7 +227,7 @@
     </div>
     <div class="quick">
       {#each QUICK as t, i (t.name)}
-        <button class="qk" onclick={() => quick(t)}>
+        <button class="qk" onclick={() => quickStart(t)}>
           <i style:--c={PALETTE[i % PALETTE.length]}>{t.badge}</i>
           <span><b>{t.name}</b><small>{t.sub}</small></span>
         </button>
@@ -246,7 +246,7 @@
       {#if tab === 'community'}
         <div class="sort" role="group" aria-label="Trier les listes publiées">
           {#each CSORTS as s (s.id)}
-            <button aria-pressed={csort === s.id} onclick={() => setCsort(s.id)}>{s.label}</button>
+            <button aria-pressed={csort === s.id} onclick={() => setCommunitySort(s.id)}>{s.label}</button>
           {/each}
         </div>
       {:else}
@@ -298,7 +298,7 @@
                   <span class="pill">{plural(n, 'vignette')}</span>
                   <span class="pill">{plural(l.tiers.length, 'rang')}</span>
                   {#if l.live}<span class="pill">Partagée</span>{/if}
-                  <time datetime={new Date(l.updatedAt).toISOString()}>{relTime(l.updatedAt)}</time>
+                  <time datetime={new Date(l.updatedAt).toISOString()}>{relativeTime(l.updatedAt)}</time>
                 </span>
               </div>
               <button

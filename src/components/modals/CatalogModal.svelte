@@ -105,7 +105,7 @@
   onDestroy(() => abort.abort());
 
   /** Image réduite, ou undefined si indisponible (la vignette devient alors du texte). */
-  async function cover(h: CatalogHit): Promise<Blob | undefined> {
+  async function fetchCover(h: CatalogHit): Promise<Blob | undefined> {
     if (!h.image) return undefined;
     try {
       return await shrink(await fetchImage(h.image, abort.signal));
@@ -114,7 +114,7 @@
     }
   }
 
-  async function run() {
+  async function addPicked() {
     if (!picked.size || tooMany || busy) return;
     busy = true;
     const chosen = [...picked.values()];
@@ -122,7 +122,7 @@
     progress = `Récupération 0/${chosen.length}…`;
     try {
       const entries = await mapLimit(chosen, 4, async ({ hit }) => {
-        const blob = await cover(hit);
+        const blob = await fetchCover(hit);
         progress = `Récupération ${++done}/${chosen.length}…`;
         return { text: hit.name, blob };
       });
@@ -207,7 +207,7 @@
     <div class="foot">
       {#if picked.size}<button class="btn l" onclick={() => (picked = new Map())} disabled={busy}>Vider la sélection</button>{/if}
       <button class="btn" onclick={onclose}>Annuler</button>
-      <button class="btn pri" onclick={run} disabled={busy || !picked.size || tooMany}>
+      <button class="btn pri" onclick={addPicked} disabled={busy || !picked.size || tooMany}>
         {busy ? 'Import…' : `Ajouter ${plural(picked.size, 'vignette')}`}
       </button>
     </div>

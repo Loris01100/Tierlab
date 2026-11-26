@@ -69,7 +69,7 @@ export class Editor {
 
   /* ---------- historique ---------- */
 
-  snap(): string {
+  snapshot(): string {
     return JSON.stringify({ title: this.title, tiers: this.tiers, pool: this.pool } satisfies Snap);
   }
   #restore(s: string) {
@@ -86,7 +86,7 @@ export class Editor {
     this.#hist = h;
   }
   commit() {
-    this.pushHistory(this.snap());
+    this.pushHistory(this.snapshot());
   }
   undo(): boolean {
     const h = this.#hist;
@@ -106,12 +106,12 @@ export class Editor {
   }
   /** Saisie continue (titre, nom de rang) : un seul pas d'historique par session d'édition. */
   beginEdit() {
-    this.#pending = this.snap();
+    this.#pending = this.snapshot();
   }
   endEdit() {
     // Fin de saisie : la dernière valeur part tout de suite, sans attendre la pause de frappe.
     this.live?.release();
-    if (this.#pending && this.#pending !== this.snap()) this.pushHistory(this.#pending);
+    if (this.#pending && this.#pending !== this.snapshot()) this.pushHistory(this.#pending);
     this.#pending = null;
     this.touch();
   }
@@ -146,7 +146,7 @@ export class Editor {
   /* ---------- vignettes ---------- */
 
   /** Ajoute des vignettes en une seule copie de `items` (pas une par vignette : un import de 200 resterait linéaire). */
-  #add(...its: Item[]) {
+  #addItems(...its: Item[]) {
     this.items = { ...this.items, ...Object.fromEntries(its.map((it) => [it.id, it])) };
     for (const it of its) this.#dirty.add(it.id);
   }
@@ -202,7 +202,7 @@ export class Editor {
   /** Ajoute des vignettes neuves à une zone, en une seule étape d'annulation. */
   #addAll(items: Item[], zone: string) {
     this.commit();
-    this.#add(...items);
+    this.#addItems(...items);
     this.#run({ k: 'add', zone, items: items.map(toLive) });
   }
 
@@ -260,7 +260,7 @@ export class Editor {
   replaceItem(id: string, draft: ItemDraft) {
     this.commit();
     const it: Item = { ...draft, id: uid(), listId: this.id };
-    this.#add(it);
+    this.#addItems(it);
     this.#run({ k: 'replace', id, item: toLive(it) });
     this.selId = it.id;
   }
@@ -268,7 +268,7 @@ export class Editor {
   duplicateItem(id: string, draft: ItemDraft) {
     this.commit();
     const it: Item = { ...draft, id: uid(), listId: this.id };
-    this.#add(it);
+    this.#addItems(it);
     this.#run({ k: 'dup', id, item: toLive(it) });
   }
 

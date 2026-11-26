@@ -53,7 +53,7 @@ const CHAR_QUERY = `query ($page: Int, $perPage: Int, $search: String, $sort: [C
 
 type Vars = Record<string, string | number | string[]>;
 
-async function page<T>(q: string, vars: Vars): Promise<{ items: T[]; next: boolean }> {
+async function fetchPage<T>(q: string, vars: Vars): Promise<{ items: T[]; next: boolean }> {
   const d = await getJson<AlPage<T>>(ENDPOINT, { service: 'AniList', host: HOST, body: { query: q, variables: vars } });
   const p = d.data?.Page;
   if (!p) throw new HttpError(502, `Erreur AniList : ${d.errors?.[0]?.message ?? 'réponse vide'}`);
@@ -61,10 +61,10 @@ async function page<T>(q: string, vars: Vars): Promise<{ items: T[]; next: boole
 }
 
 /** Lit jusqu'à LIST_PAGES pages à la suite (une liste de 100 reste bien sous le quota). */
-async function pages<T>(q: string, vars: Vars): Promise<T[]> {
+async function fetchAllPages<T>(q: string, vars: Vars): Promise<T[]> {
   const out: T[] = [];
   for (let n = 1; n <= LIST_PAGES; n++) {
-    const p = await page<T>(q, { ...vars, page: n, perPage: PAGE });
+    const p = await fetchPage<T>(q, { ...vars, page: n, perPage: PAGE });
     out.push(...p.items);
     if (!p.next) break;
   }
@@ -84,7 +84,7 @@ const FORMAT: Record<string, string> = {
   ONE_SHOT: 'One shot',
 };
 
-function media(m: AlMedia): CatalogHit {
+function toMediaHit(m: AlMedia): CatalogHit {
   const name = m.title.romaji || m.title.english || '?';
   const english = m.title.english && m.title.english !== name ? m.title.english : '';
   const format = m.format ? (FORMAT[m.format] ?? m.format) : '';
@@ -96,7 +96,7 @@ function media(m: AlMedia): CatalogHit {
   };
 }
 
-const character = (c: AlCharacter): CatalogHit => ({
+const toCharacterHit = (c: AlCharacter): CatalogHit => ({
   id: String(c.id),
   name: c.name.full || c.name.native || '?',
   image: c.image?.large ?? null,
@@ -112,25 +112,25 @@ function currentSeason(now = new Date()): { season: string; year: number } {
 }
 
 const searchMedia = async (type: 'ANIME' | 'MANGA', search: string) =>
-  (await page<AlMedia>(MEDIA_QUERY, { type, search, sort: ['SEARCH_MATCH'], perPage: SEARCH_LIMIT })).items.map(media);
+  (await fetchPage<AlMedia>(MEDIA_QUERY, { type, search, sort: ['SEARCH_MATCH'], perPage: SEARCH_LIMIT })).items.map(toMediaHit);
 
 export const animeSource: CatalogSource = {
   images: IMAGES,
   search: (q) => searchMedia('ANIME', q),
   async list(id) {
     const vars: Vars = id === 'season' ? { type: 'ANIME', sort: ['POPULARITY_DESC'], ...currentSeason() } : { type: 'ANIME', sort: ['SCORE_DESC'] };
-    return (await pages<AlMedia>(MEDIA_QUERY, vars)).map(media);
+    return (await fetchAllPages<AlMedia>(MEDIA_QUERY, vars)).map(toMediaHit);
   },
 };
 
 export const mangaSource: CatalogSource = {
   images: IMAGES,
   search: (q) => searchMedia('MANGA', q),
-  list: async () => (await pages<AlMedia>(MEDIA_QUERY, { type: 'MANGA', sort: ['SCORE_DESC'] })).map(media),
+  list: async () => (await fetchAllPages<AlMedia>(MEDIA_QUERY, { type: 'MANGA', sort: ['SCORE_DESC'] })).map(toMediaHit),
 };
 
 export const charactersSource: CatalogSource = {
   images: IMAGES,
-  search: async (q) => (await page<AlCharacter>(CHAR_QUERY, { search: q, sort: ['SEARCH_MATCH'], perPage: SEARCH_LIMIT })).items.map(character),
-  list: async () => (await pages<AlCharacter>(CHAR_QUERY, { sort: ['FAVOURITES_DESC'] })).map(character),
+  search: async (q) => (await fetchPage<AlCharacter>(CHAR_QUERY, { search: q, sort: ['SEARCH_MATCH'], perPage: SEARCH_LIMIT })).items.map(toCharacterHit),
+  list: async () => (await fetchAllPages<AlCharacter>(CHAR_QUERY, { sort: ['FAVOURITES_DESC'] })).map(toCharacterHit),
 };

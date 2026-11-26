@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { hex6 } from '../lib/utils';
+  import { expandHex } from '../lib/utils';
 
   let {
     colors,
@@ -18,6 +18,6 @@
     <button type="button" style:--c={c} aria-label="Couleur {c}" aria-pressed={value === c} onclick={() => (value = c)}></button>
   {/each}
   {#if custom}
-    <input type="color" aria-label="Couleur personnalisée" value={value === 'mix' ? '#3d5afe' : hex6(value)} oninput={(e) => (value = e.currentTarget.value)} />
+    <input type="color" aria-label="Couleur personnalisée" value={value === 'mix' ? '#3d5afe' : expandHex(value)} oninput={(e) => (value = e.currentTarget.value)} />
   {/if}
 </div>

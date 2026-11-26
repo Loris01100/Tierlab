@@ -1,10 +1,10 @@
 <script lang="ts">
   import type { CommunityList } from '../../shared/community';
   import { ApiError } from '../lib/api';
-  import { communityImg, copyList, fetchList, ownerOf, report, unpublish } from '../lib/community.svelte';
+  import { communityImageUrl, copyList, fetchCommunityList, ownerOf, reportList, unpublish } from '../lib/community.svelte';
   import { COMMUNITY_PATH, go, listPath } from '../lib/router.svelte';
   import { toast } from '../lib/toast.svelte';
-  import { fgFor, plural, relTime } from '../lib/utils';
+  import { fgFor, plural, relativeTime } from '../lib/utils';
   import Icon from './Icon.svelte';
   import Logo from './Logo.svelte';
   import Modal from './Modal.svelte';
@@ -17,14 +17,14 @@
   let busy = $state(false);
   let modal = $state<'report' | 'remove' | null>(null);
 
-  const msg = (e: unknown, fallback: string): string => (e instanceof ApiError ? e.message : fallback);
+  const errorMessage = (e: unknown, fallback: string): string => (e instanceof ApiError ? e.message : fallback);
 
   $effect(() => {
     const ctrl = new AbortController();
-    fetchList(id, ctrl.signal).then(
+    fetchCommunityList(id, ctrl.signal).then(
       (d) => (data = d),
       (e: unknown) => {
-        if ((e as Error).name !== 'AbortError') error = msg(e, 'Liste indisponible');
+        if ((e as Error).name !== 'AbortError') error = errorMessage(e, 'Liste indisponible');
       },
     );
     return () => ctrl.abort();
@@ -41,7 +41,7 @@
       toast('Copie ajoutée à vos listes');
       go(listPath(listId));
     } catch (e) {
-      toast(msg(e, 'Copie impossible (stockage local plein ou bloqué ?)'));
+      toast(errorMessage(e, 'Copie impossible (stockage local plein ou bloqué ?)'));
     } finally {
       busy = false;
     }
@@ -50,10 +50,10 @@
   async function sendReport() {
     modal = null;
     try {
-      await report(id);
+      await reportList(id);
       toast('Merci, la liste a été signalée');
     } catch (e) {
-      toast(msg(e, 'Signalement impossible'));
+      toast(errorMessage(e, 'Signalement impossible'));
     }
   }
 
@@ -65,7 +65,7 @@
       toast('Liste retirée de la communauté');
       go(COMMUNITY_PATH);
     } catch (e) {
-      toast(msg(e, 'Retrait impossible'));
+      toast(errorMessage(e, 'Retrait impossible'));
     }
   }
 </script>
@@ -75,10 +75,10 @@
   {#if it?.type === 'img'}
     <div class="tile" class:capt={!!it.text} role="img" aria-label={it.text || 'Image'}>
       {#if it.text}
-        <span class="pic"><img src={communityImg(id, it.id)} alt="" loading="lazy" /></span>
+        <span class="pic"><img src={communityImageUrl(id, it.id)} alt="" loading="lazy" /></span>
         <span class="cap">{it.text}</span>
       {:else}
-        <img src={communityImg(id, it.id)} alt="" loading="lazy" />
+        <img src={communityImageUrl(id, it.id)} alt="" loading="lazy" />
       {/if}
     </div>
   {:else if it}
@@ -113,7 +113,7 @@
   <main class="view">
     <p class="vmeta">
       <span>par <b>{data.author || 'Anonyme'}</b></span>
-      <span>{data.updated > data.created ? 'mise à jour' : 'publiée'} {relTime(data.updated)}</span>
+      <span>{data.updated > data.created ? 'mise à jour' : 'publiée'} {relativeTime(data.updated)}</span>
       <span>{plural(data.tiles, 'vignette')}</span>
       {#if data.copies}<span>{plural(data.copies, 'copie')}</span>{/if}
     </p>

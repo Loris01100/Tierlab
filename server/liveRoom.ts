@@ -84,7 +84,7 @@ export class LiveRoom {
       const pair = new WebSocketPair();
       this.#ctx.acceptWebSocket(pair[1]);
       send(pair[1], { t: 'state', board: this.#board() });
-      this.#peers();
+      this.#broadcastPeers();
       return new Response(null, { status: 101, webSocket: pair[0] } as ResponseInit);
     }
 
@@ -115,11 +115,11 @@ export class LiveRoom {
     } catch {
       /* déjà fermée */
     }
-    this.#peers(ws);
+    this.#broadcastPeers(ws);
   }
 
   webSocketError(ws: Socket): void {
-    this.#peers(ws);
+    this.#broadcastPeers(ws);
   }
 
   /* ---------- interne ---------- */
@@ -157,7 +157,7 @@ export class LiveRoom {
   }
 
   /** Diffuse le nombre de personnes connectées (sans la socket qui se ferme). */
-  #peers(closing?: Socket) {
+  #broadcastPeers(closing?: Socket) {
     const all = this.#ctx.getWebSockets().filter((ws) => ws !== closing);
     const out = JSON.stringify({ t: 'peers', n: all.length } satisfies ServerMsg);
     for (const ws of all) trySend(ws, out);

@@ -2,7 +2,7 @@ import { COMMUNITY, type CommunityList, type CommunityPage, type CommunitySort, 
 import { ApiError, apiGet, apiPost, apiUrl, RawJson } from './api';
 import type { Editor } from './editor.svelte';
 import { saveShared, toShared } from './share';
-import { pref, setPref } from './utils';
+import { getPref, setPref } from './utils';
 
 /**
  * Galerie communautaire (serveur : server/gallery.ts). Publier envoie une copie figée de la liste ouverte ;
@@ -12,17 +12,17 @@ import { pref, setPref } from './utils';
 const KEY = 'tierlab-published';
 
 /** Publications faites depuis cet appareil : id de la liste locale → publication. */
-export const published = $state<Record<string, Published>>(pref(KEY, {}));
+export const published = $state<Record<string, Published>>(getPref(KEY, {}));
 
-const save = () => setPref(KEY, $state.snapshot(published));
+const savePublished = () => setPref(KEY, $state.snapshot(published));
 
 /** Id de la liste locale qui a donné cette publication, si elle vient de cet appareil. */
 export const ownerOf = (pubId: string): string | undefined => Object.keys(published).find((k) => published[k].id === pubId);
 
-export const communityImg = (id: string, item: string): string => apiUrl(`/community/${id}/img/${item}`);
+export const communityImageUrl = (id: string, item: string): string => apiUrl(`/community/${id}/img/${item}`);
 
 /** Corps de publication sérialisé une seule fois : la même chaîne sert au contrôle de taille et à l'envoi. */
-async function body(ed: Editor, author: string, token?: string): Promise<RawJson> {
+async function publishBody(ed: Editor, author: string, token?: string): Promise<RawJson> {
   const list = await toShared({ title: ed.title, tiers: ed.tiers, pool: ed.pool, items: ed.items });
   const text = JSON.stringify({ author: author.trim(), list, ...(token ? { token } : {}) } satisfies PublishBody);
   if (text.length > COMMUNITY.body) throw new ApiError(413, 'Liste trop lourde pour être publiée (trop d’images)');
@@ -30,16 +30,16 @@ async function body(ed: Editor, author: string, token?: string): Promise<RawJson
 }
 
 export async function publish(ed: Editor, author: string): Promise<Published> {
-  const p = await apiPost<Published>('/community', await body(ed, author));
+  const p = await apiPost<Published>('/community', await publishBody(ed, author));
   published[ed.id] = p;
-  save();
+  savePublished();
   return p;
 }
 
 /** Remplace la publication par l'état actuel de la liste. */
 export async function republish(ed: Editor, author: string): Promise<void> {
   const p = published[ed.id];
-  if (p) await apiPost(`/community/${p.id}/update`, await body(ed, author, p.token));
+  if (p) await apiPost(`/community/${p.id}/update`, await publishBody(ed, author, p.token));
 }
 
 /** Retire la publication de la liste locale listId (déjà retirée côté serveur : on oublie simplement le jeton). */
@@ -52,13 +52,13 @@ export async function unpublish(listId: string): Promise<void> {
     if (!(e instanceof ApiError && e.status === 404)) throw e;
   }
   delete published[listId];
-  save();
+  savePublished();
 }
 
-export const fetchPage = (q: string, sort: CommunitySort, page: number, signal?: AbortSignal): Promise<CommunityPage> =>
+export const fetchCommunityPage = (q: string, sort: CommunitySort, page: number, signal?: AbortSignal): Promise<CommunityPage> =>
   apiGet<CommunityPage>('/community', { q: q || undefined, sort, page: page || undefined }, signal);
 
-export const fetchList = (id: string, signal?: AbortSignal): Promise<CommunityList> => apiGet<CommunityList>(`/community/${id}`, undefined, signal);
+export const fetchCommunityList = (id: string, signal?: AbortSignal): Promise<CommunityList> => apiGet<CommunityList>(`/community/${id}`, undefined, signal);
 
 /** « Faire ma version » : copie la liste publiée dans la bibliothèque locale ; renvoie l'id de la nouvelle liste. */
 export async function copyList(id: string): Promise<string> {
@@ -68,4 +68,4 @@ export async function copyList(id: string): Promise<string> {
   return listId;
 }
 
-export const report = (id: string): Promise<unknown> => apiPost(`/community/${id}/report`, {});
+export const reportList = (id: string): Promise<unknown> => apiPost(`/community/${id}/report`, {});

@@ -16,7 +16,7 @@ description: Conventions TypeScript et de code de Tierlab (strict, deux tsconfig
 - Pas d'`enum` ni de `namespace` : utiliser des unions de littéraux (`'text' | 'img'`) et des objets `as const` (cf. `LIMITS`).
 - Pas de `any`. Pour une donnée externe (JSON, import, réponse d'API) : `unknown` puis vérification, ou une interface décrivant **les champs utilisés** suivie d'une assertion localisée.
 - `!` (non-null) seulement quand l'invariant est évident à la ligne même (ex. `getContext('2d')!`) ; sinon tester et gérer le cas.
-- Préférer `satisfies` à une assertion `as` quand on veut vérifier une forme sans perdre le type inféré (cf. `snap()` dans `editor.svelte.ts`).
+- Préférer `satisfies` à une assertion `as` quand on veut vérifier une forme sans perdre le type inféré (cf. `snapshot()` dans `editor.svelte.ts`).
 - `readonly` pour les champs qui ne changent pas ; champs privés natifs `#x` plutôt que `private x`.
 - Fonctions exportées : type de retour explicite (`: Promise<void>`, `: string`) comme dans `db.ts` / `api.ts`.
 

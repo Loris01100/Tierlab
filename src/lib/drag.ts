@@ -46,7 +46,7 @@ export function attachDrag(ed: Editor, hooks: DragHooks): () => void {
     g.style.width = r.width + 'px';
     g.style.height = r.height + 'px';
     document.body.appendChild(g);
-    Object.assign(s, { on: true, ghost: g, dx: s.x - r.left, dy: s.y - r.top, before: ed.snap(), poolBefore: ed.pool.length, lx: s.x });
+    Object.assign(s, { on: true, ghost: g, dx: s.x - r.left, dy: s.y - r.top, before: ed.snapshot(), poolBefore: ed.pool.length, lx: s.x });
     ed.dragId = s.id;
     document.body.classList.add('dragging');
     return true;
@@ -123,7 +123,7 @@ export function attachDrag(ed: Editor, hooks: DragHooks): () => void {
       hooks.trashed(s.ghost!);
       return;
     }
-    if (ed.snap() !== s.before) {
+    if (ed.snapshot() !== s.before) {
       ed.dropped(s.id, s.before);
       hooks.landed(s.id, ed.isDone(s.poolBefore));
     }
