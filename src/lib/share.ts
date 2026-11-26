@@ -1,4 +1,5 @@
 import { LIMITS } from './constants';
+import { saveList } from './db';
 import { blobToDataURL, dataURLToBlob } from './images';
 import type { Item, Tier } from './types';
 import { fgFor, isColor, uid } from './utils';
@@ -97,4 +98,14 @@ export async function fromShared(raw: unknown, listId: string): Promise<Imported
   }));
   if (!tiers.length) return null;
   return { title: String(d.title ?? '').slice(0, LIMITS.title), tiers, pool: ids(d.pool), items };
+}
+
+/** Enregistre un code reçu comme nouvelle liste locale ; renvoie son id, ou null si le code est invalide. */
+export async function saveShared(raw: unknown, title?: string): Promise<string | null> {
+  const id = uid();
+  const d = await fromShared(raw, id);
+  if (!d) return null;
+  const now = Date.now();
+  await saveList({ id, title: title ?? (d.title || 'Tier liste importée'), tiers: d.tiers, pool: d.pool, createdAt: now, updatedAt: now }, d.items);
+  return id;
 }

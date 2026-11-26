@@ -1,12 +1,15 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { COMMUNITY } from '../../../shared/community';
   import { ApiError } from '../../lib/api';
+  import { publish, published, republish, unpublish } from '../../lib/community.svelte';
   import type { Editor } from '../../lib/editor.svelte';
   import { createRoom } from '../../lib/live.svelte';
-  import { livePath } from '../../lib/router.svelte';
+  import { communityPath, livePath } from '../../lib/router.svelte';
   import { toShared } from '../../lib/share';
   import { toast } from '../../lib/toast.svelte';
-  import { plural } from '../../lib/utils';
+  import { plural, pref, setPref } from '../../lib/utils';
+  import Icon from '../Icon.svelte';
   import Modal from '../Modal.svelte';
 
   let { ed, onclose }: { ed: Editor; onclose: () => void } = $props();
@@ -59,6 +62,44 @@
     }
   }
 
+  /* ---------- communauté ---------- */
+  const pub = $derived(published[ed.id]);
+  let author = $state(pref('tierlab-author', ''));
+  let pubBusy = $state(false);
+  let confirmUnpub = $state(false);
+
+  async function sendPub() {
+    pubBusy = true;
+    setPref('tierlab-author', author.trim());
+    try {
+      await ed.flush();
+      if (pub) {
+        await republish(ed, author);
+        toast('Publication mise à jour');
+      } else {
+        await publish(ed, author);
+        toast('Liste publiée dans la communauté');
+      }
+    } catch (e) {
+      toast(e instanceof ApiError ? e.message : 'Publication impossible');
+    } finally {
+      pubBusy = false;
+    }
+  }
+
+  async function unpub() {
+    confirmUnpub = false;
+    pubBusy = true;
+    try {
+      await unpublish(ed.id);
+      toast('Liste retirée de la communauté');
+    } catch (e) {
+      toast(e instanceof ApiError ? e.message : 'Retrait impossible');
+    } finally {
+      pubBusy = false;
+    }
+  }
+
   function leave() {
     ed.leaveLive();
     confirmLeave = false;
@@ -93,6 +134,31 @@
       <button class="btn pri" disabled={busy} onclick={start}>
         {#if sent && sent.total}Envoi des images… {sent.done}/{sent.total}{:else if busy}Création…{:else}Créer le lien partagé{/if}
       </button>
+    </div>
+  {/if}
+
+  <h3 class="msub">Publier dans la communauté</h3>
+  <p class="small">
+    {#if pub}
+      Publiée : tout le monde la voit dans l’onglet Communauté et peut en faire sa version. Vos modifications n’y apparaissent qu’après « Mettre à jour ».
+    {:else}
+      Une copie figée de la liste devient visible par tous, sans compte. Vous pourrez la mettre à jour ou la retirer depuis cet appareil.
+    {/if}
+  </p>
+  <label for="shAuthor">Pseudo affiché (facultatif)</label>
+  <div class="linkrow">
+    <input id="shAuthor" type="text" maxlength={COMMUNITY.author} placeholder="Anonyme" bind:value={author} />
+    <button class="btn" class:pri={!pub} disabled={pubBusy} onclick={sendPub}><Icon name="globe" />{pub ? 'Mettre à jour' : 'Publier'}</button>
+  </div>
+  {#if pub}
+    <div class="foot start">
+      <a class="btn sm" href="#{communityPath(pub.id)}" onclick={onclose}>Voir la publication</a>
+      {#if confirmUnpub}
+        <button class="btn sm" onclick={() => (confirmUnpub = false)}>Garder</button>
+        <button class="btn sm pri danger-bg" disabled={pubBusy} onclick={unpub}>Retirer de la communauté</button>
+      {:else}
+        <button class="btn sm danger" disabled={pubBusy} onclick={() => (confirmUnpub = true)}>Retirer…</button>
+      {/if}
     </div>
   {/if}
 

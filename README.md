@@ -79,13 +79,35 @@ Fonctionnement :
 
 Autres routes : `POST /api/live` (création, renvoie `{ room }`), `GET /api/live/:salle/info` (titre, 404 si le lien n'existe pas).
 
+## Communauté (listes publiées)
+
+La bibliothèque a deux onglets : **Mes tier listes** (`#/`, stockées sur l'appareil) et **Communauté** (`#/community`), la
+galerie des listes publiées par tout le monde (recherche, tri « Récentes » / « Populaires », pages de 24).
+**Partager → Publier dans la communauté** envoie une copie figée de la liste avec un pseudo facultatif. Depuis le même
+appareil, on peut ensuite « Mettre à jour » ou « Retirer » la publication : le jeton reçu à la publication est gardé
+dans le `localStorage` (`tierlab-published`). Une liste publiée s'ouvre en lecture seule (`#/community/<id>`) ;
+« Faire ma version » la copie dans « Mes tier listes ».
+
+Fonctionnement :
+- toutes les publications vivent dans un seul Durable Object (`server/gallery.ts`, liaison `GALLERY`, SQLite : listes, images en BLOB,
+  copies et signalements) ; les routes sont déclarées une fois dans `server/community.ts` ;
+- la publication reprend le format du code de partage (`SharedData`, images en data URL), validé côté serveur
+  (formats, signature des fichiers, 512 Ko par image, 200 images, 8 Mo au total) ;
+- garde-fous sans comptes : 10 publications par heure et par adresse, une copie et un signalement comptés par adresse
+  (adresses conservées seulement sous forme d'empreinte), liste masquée après 3 signalements ;
+- le secret facultatif `ADMIN_TOKEN` (`npx wrangler secret put ADMIN_TOKEN`, 16 caractères minimum) remplace le jeton de
+  l'auteur pour retirer n'importe quelle liste : `POST /api/community/<id>/delete` avec `{ "token": "…" }`.
+
+Routes : `GET /api/community?q=&sort=recent|popular&page=`, `POST /api/community` (publication, renvoie `{ id, token }`),
+`GET /api/community/:id`, `GET /api/community/:id/img/:vignette`, `POST /api/community/:id/copy|report|update|delete`.
+
 ## Structure
 
 ```
-server/                    API côté serveur : routeur /api, relais d'images, musique (Deezer), catalogues, salles partagées, Worker
-shared/                    types et règles partagés serveur / navigateur (live.ts : opérations d'édition partagée)
+server/                    API côté serveur : routeur /api, relais d'images, musique (Deezer), catalogues, salles partagées, galerie, Worker
+shared/                    types et règles partagés serveur / navigateur (live.ts : édition partagée, community.ts : galerie)
 src/
-  main.ts, App.svelte      point d'entrée, routage #/, #/list/<id> et #/live/<salle>
+  main.ts, App.svelte      point d'entrée, routage #/, #/community[/<id>], #/list/<id> et #/live/<salle>
   app.css                  feuille de style unique (reprise du prototype)
   lib/
     types.ts               Item, Tier, TierList
@@ -98,14 +120,17 @@ src/
     catalog.ts             catalogues : recherche et listes prédéfinies
     share.ts               code de partage JSON (compatible avec le prototype)
     live.svelte.ts         édition partagée : connexion WebSocket, opérations en attente, images
+    community.svelte.ts    galerie : publier, mettre à jour, retirer, parcourir, copier
     exportImage.ts         export PNG via canvas
     effects.ts             confettis
     model.ts, constants.ts, utils.ts, router.svelte.ts, toast.svelte.ts
   components/
-    Library.svelte         bibliothèque : créer, ouvrir, dupliquer, supprimer, importer
+    Library.svelte         bibliothèque : créer, ouvrir, dupliquer, supprimer, importer ; onglet Communauté
+    CommunityGrid.svelte   galerie des listes publiées
+    CommunityView.svelte   liste publiée en lecture seule (faire ma version, signaler, retirer)
     EditorPage.svelte      chargement d'une liste depuis IndexedDB
     Editor.svelte          éditeur : en-tête, rangs, clavier, collage, dépôt de fichiers
-    Row, Zone, Tile, Dock, Swatches, Modal, Icon
+    Row, Zone, Tile, Dock, Swatches, Modal, Icon, Logo
     modals/                rang, vignette, partage, export, nouvelle liste, import, catalogues (dont l'onglet musique)
 ```
 

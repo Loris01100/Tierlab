@@ -44,8 +44,14 @@ To see the site: `npm run dev` then open http://localhost:5173. In VS Code, F5 (
 - `src/lib/live.svelte.ts` (`LiveLink`): server-confirmed state + pending ops; on every remote op it recomputes confirmed+pending and calls `Editor.adopt()`. Images are uploaded before the op that references them; missing ones are fetched and set with `Editor.setBlob()`. Drag moves stay local (`placeLive`) until `Editor.dropped()` sends the final position.
 - A linked list keeps a local copy with `TierList.live = room` (Dexie v2 index `live`); `#/live/<room>` (`LiveJoin.svelte`) finds or creates it. Undo is disabled in live mode (`pushHistory` is a no-op).
 
+### Community gallery (published lists)
+- All published lists live in one Durable Object `Gallery` (`server/gallery.ts`, binding `GALLERY`, instance `main`, SQLite tables `list` / `img` / `mark`). Route table declared once in `server/community.ts` (`routesFor`): the Worker forwards each route to the object, which runs the same paths through its own `createApi`.
+- Publishing sends `PublishBody` (`shared/community.ts`): pseudo + the list in `SharedData` format (images as data URLs, validated server-side: type, file signature, size). Returns `{ id, token }`; the token (stored hashed) is kept in localStorage `tierlab-published` keyed by local list id (`src/lib/community.svelte.ts`) and is needed for update/delete. Optional secret `ADMIN_TOKEN` can delete any list.
+- No accounts: per-IP-hash limits (10 publications/hour, one copy and one report counted per IP), hidden at 3 reports.
+- Front: `Library.svelte` tab `community` (`#/community`) renders `CommunityGrid.svelte`; `#/community/<id>` → `CommunityView.svelte` (read-only board, « Faire ma version » = `POST /copy` → `saveShared()` in `share.ts`). Publish/update/remove from `ShareModal.svelte`.
+
 ### Front end
-- Hash routing (`src/lib/router.svelte.ts`): `#/` → `Library.svelte`, `#/list/<id>` → `EditorPage.svelte` (loads from IndexedDB) → `Editor.svelte`, `#/live/<room>` → `LiveJoin.svelte`.
+- Hash routing (`src/lib/router.svelte.ts`): `#/` → `Library.svelte` (`#/community` = its community tab, `#/community/<id>` → `CommunityView.svelte`), `#/list/<id>` → `EditorPage.svelte` (loads from IndexedDB) → `Editor.svelte`, `#/live/<room>` → `LiveJoin.svelte`.
 - `src/lib/editor.svelte.ts` — the `Editor` class is the reactive state of an open list (`$state` fields). All mutations go through its methods, which push an undo snapshot (JSON of `title`/`tiers`/`pool`) and call `touch()` → debounced (400 ms) save to IndexedDB. Drag state (`dragId`, `overZone`, `overTrash`) also lives here and is read by components. The unranked pool zone id is `POOL`.
 - `src/lib/drag.ts`: custom Pointer Events drag-and-drop (mouse + touch), no library.
 - Library (`Library.svelte`): search, sort (pref `tierlab-sort`), card previews read the first tiles via `previewItems()` (`db.ts`), « Démarrer vite » shortcuts create a list and hand the catalog tab to the editor through `pendingCatalog` (`src/lib/catalog.ts`).

@@ -11,9 +11,17 @@
     "run_worker_first": ["/api/*"],
     "not_found_handling": "single-page-application"
   },
-  // Salles d'édition partagée : un Durable Object (stockage SQLite) par lien.
-  "durable_objects": { "bindings": [{ "name": "LIVE", "class_name": "LiveRoom" }] },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["LiveRoom"] }],
+  // Durable Objects (stockage SQLite) : une salle d'édition partagée par lien (LIVE), la galerie communautaire (GALLERY, instance unique).
+  "durable_objects": {
+    "bindings": [
+      { "name": "LIVE", "class_name": "LiveRoom" },
+      { "name": "GALLERY", "class_name": "Gallery" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["LiveRoom"] },
+    { "tag": "v2", "new_sqlite_classes": ["Gallery"] }
+  ],
   "routes": [{ "pattern": "mainlist.reesch.com", "custom_domain": true }],
   "observability": { "enabled": true }
 }

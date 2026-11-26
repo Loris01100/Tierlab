@@ -1,6 +1,6 @@
 ---
 name: worker-api
-description: Règles du backend /api de Tierlab (server/, shared/, Cloudflare Worker exécuté aussi en dev par @cloudflare/vite-plugin, Durable Object des salles partagées). À charger avant d'ajouter ou modifier une route /api, d'appeler un service externe, de gérer un secret, ou de toucher à wrangler.jsonc, worker.ts, liveRoom.ts ou vite.config.ts.
+description: Règles du backend /api de Tierlab (server/, shared/, Cloudflare Worker exécuté aussi en dev par @cloudflare/vite-plugin, Durable Objects des salles partagées et de la galerie). À charger avant d'ajouter ou modifier une route /api, d'appeler un service externe, de gérer un secret, ou de toucher à wrangler.jsonc, worker.ts, liveRoom.ts, gallery.ts ou vite.config.ts.
 ---
 
 # Backend `/api` (Cloudflare Worker, même code en dev via Vite)
@@ -10,7 +10,7 @@ Le routeur (`server/api.ts`) tourne dans le Worker (`server/worker.ts`), en prod
 ## Contraintes d'exécution (Workers)
 - Uniquement des API web standard dans les routes : `fetch`, `Request`, `Response`, `URL`, `URLSearchParams`, `Headers`, `crypto.subtle`, `crypto.randomUUID`, `TextEncoder`, streams web.
 - **Interdit** dans un module de route : `node:*`, `fs`, `path`, `process.env`, `Buffer`, `__dirname`. Seul `vite.config.ts` peut importer `node:*`.
-- APIs propres aux Workers (Durable Objects, `WebSocketPair`…) : décrire localement une interface minimale des champs utilisés (modèle : `server/liveRoom.ts`), sans `@cloudflare/workers-types` (conflit avec les types Node de `tsconfig.node.json`).
+- APIs propres aux Workers (Durable Objects, `WebSocketPair`…) : décrire localement une interface minimale des champs utilisés (modèles : `server/liveRoom.ts`, `server/gallery.ts` ; liaison et ids aléatoires : `server/objects.ts`), sans `@cloudflare/workers-types` (conflit avec les types Node de `tsconfig.node.json`).
 - Pas d'état global mutable comptant sur la persistance entre requêtes : un isolate Worker peut être recyclé à tout moment ou dupliqué. Un cache mémoire n'est qu'une optimisation opportuniste.
 - Lire la configuration depuis `ctx.env` (Worker : variables/secrets Cloudflare ; dev : `.env.local` ou `.dev.vars`, lus par Wrangler). Typage : `ctx.env.MA_CLE as string | undefined`, et `HttpError(500, 'Configuration manquante : MA_CLE')` si absente.
 

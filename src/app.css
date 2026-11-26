@@ -176,6 +176,14 @@ kbd { font: 12px Rubik, sans-serif; border: 1px solid var(--line); border-bottom
 .lib-h { font: 800 clamp(26px, 3.4vw, 36px)/1.1 Rubik, sans-serif; letter-spacing: -0.02em; margin: 0; }
 .lib-h2 { font: 800 20px/1.2 Rubik, sans-serif; margin: 0; }
 .lib-sub { margin-left: auto; font-size: 14px; color: var(--mute); }
+.ltabs { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 22px; }
+.ltabs a { display: inline-flex; align-items: center; gap: 10px; color: var(--mute); text-decoration: none; border-radius: 8px; transition: color 0.2s; }
+.ltabs a[aria-current='page'] { color: var(--ink); }
+.ltabs a:hover { color: var(--ink); }
+.ltabs a:focus-visible { outline: 3px solid var(--acc); outline-offset: 2px; }
+.ltabs .count { letter-spacing: 0; }
+.pill.own { background: color-mix(in srgb, var(--acc) 18%, var(--zone)); }
+.lib .btn.more { justify-self: center; }
 .count { padding: 1px 10px; border-radius: 999px; background: var(--panel); border: 1px solid var(--line); font-size: 14px; font-weight: 600; color: var(--mute); }
 .sort { margin-left: auto; display: flex; gap: 4px; padding: 4px; border-radius: 12px; background: var(--panel); border: 1px solid var(--line); }
 .sort button { min-height: 34px; padding: 0 12px; border: 0; border-radius: 8px; background: transparent; color: var(--mute); font: 500 14px Rubik, sans-serif; cursor: pointer; }
@@ -219,6 +227,17 @@ kbd { font: 12px Rubik, sans-serif; border: 1px solid var(--line); border-bottom
   .lnew button:hover { border-color: var(--acc); color: var(--acc); background: color-mix(in srgb, var(--acc) 8%, transparent); }
   .lnew button:hover .plus { transform: rotate(90deg) scale(1.08); }
 }
+
+/* ---------- liste publiée (lecture seule) ---------- */
+.vtitle { flex: 1 1 260px; margin: 0; padding: 4px 8px; font: 800 clamp(24px, 3.4vw, 38px)/1.1 Rubik, sans-serif; letter-spacing: -0.02em; overflow-wrap: anywhere; }
+.view { padding-bottom: 48px; }
+.vmeta { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0 0 12px; font-size: 14px; color: var(--mute); }
+.vmeta b { color: var(--ink); font-weight: 600; }
+.view .row { grid-template-columns: clamp(72px, 11vw, 128px) minmax(0, 1fr); }
+.view .lab, .view .tile { cursor: default; }
+.view .tile { touch-action: auto; }
+.vpool { margin: 20px 0 8px; }
+.vzone { border-radius: 12px; background: var(--zone); }
 
 /* ---------- animations ---------- */
 .brand rect { transform-box: fill-box; transform-origin: left center; animation: bar 2.6s cubic-bezier(0.5, 1.6, 0.5, 1) infinite alternate; }
@@ -275,6 +294,8 @@ kbd { font: 12px Rubik, sans-serif; border: 1px solid var(--line); border-bottom
   .qk { flex: none; min-height: 44px; padding: 4px 14px 4px 4px; border-radius: 999px; background: var(--panel); }
   .qk i { width: 34px; height: 34px; border-radius: 50%; font-size: 12px; }
   .qk small { display: none; }
+  .ltabs { gap: 4px 16px; }
+  .ltabs .lib-h { font-size: 21px; }
   .sort { margin-left: 0; width: 100%; }
   .sort button { flex: 1; }
   .lgrid { grid-template-columns: minmax(0, 1fr); gap: 10px; }

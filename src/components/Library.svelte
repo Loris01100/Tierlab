@@ -1,20 +1,26 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
+  import type { CommunitySort } from '../../shared/community';
   import { CATALOGS, pendingCatalog, type CatalogTab } from '../lib/catalog';
   import { PALETTE, PRESETS } from '../lib/constants';
   import { allLists, deleteList, loadList, previewItems, saveList } from '../lib/db';
   import { blobUrl, releaseUrls } from '../lib/images';
   import { countTiles, newList, sampleList } from '../lib/model';
-  import { go, listPath } from '../lib/router.svelte';
-  import { fromShared, toShared } from '../lib/share';
+  import { COMMUNITY_PATH, go, listPath } from '../lib/router.svelte';
+  import { saveShared, toShared } from '../lib/share';
   import { cycleTheme, theme, THEME_LABEL } from '../lib/theme.svelte';
   import { toast } from '../lib/toast.svelte';
   import type { Item, TierList } from '../lib/types';
-  import { fold, isTyping, plural, pref, relTime, setPref, uid } from '../lib/utils';
+  import { fold, isTyping, plural, pref, relTime, setPref } from '../lib/utils';
+  import CommunityGrid from './CommunityGrid.svelte';
   import Icon from './Icon.svelte';
+  import Logo from './Logo.svelte';
   import Modal from './Modal.svelte';
   import ImportModal from './modals/ImportModal.svelte';
   import NewListModal from './modals/NewListModal.svelte';
+
+  /** Onglet affiché : mes listes (#/) ou la galerie communautaire (#/community). */
+  let { tab = 'mine' }: { tab?: 'mine' | 'community' } = $props();
 
   /** Aperçu : nombre de rangs et de vignettes par rang affichés sur une carte. */
   const PREVIEW = { tiers: 5, perTier: 8 } as const;
@@ -24,6 +30,10 @@
     { id: 'recent', label: 'Récentes' },
     { id: 'az', label: 'A → Z' },
     { id: 'size', label: 'Taille' },
+  ];
+  const CSORTS: { id: CommunitySort; label: string }[] = [
+    { id: 'recent', label: 'Récentes' },
+    { id: 'popular', label: 'Populaires' },
   ];
 
   /** Raccourcis « Démarrer vite » : un modèle de rangs, ou une liste classique ouverte sur un catalogue. */
@@ -45,6 +55,7 @@
   let menu = $state<string | null>(null);
   let q = $state('');
   let sort = $state<Sort>(pref('tierlab-sort', 'recent'));
+  let csort = $state<CommunitySort>(pref('tierlab-csort', 'recent'));
   let search = $state<HTMLInputElement>();
 
   const shown = $derived.by(() => {
@@ -61,6 +72,11 @@
     setPref('tierlab-sort', s);
   }
 
+  function setCsort(s: CommunitySort) {
+    csort = s;
+    setPref('tierlab-csort', s);
+  }
+
   async function refresh() {
     lists = await allLists();
     try {
@@ -68,16 +84,6 @@
     } catch {
       /* aperçus facultatifs */
     }
-  }
-
-  /** Crée une liste à partir de données importées (code partagé, prototype). */
-  async function createFrom(raw: unknown): Promise<string | null> {
-    const id = uid();
-    const d = await fromShared(raw, id);
-    if (!d) return null;
-    const now = Date.now();
-    await saveList({ id, title: d.title || 'Tier liste importée', tiers: d.tiers, pool: d.pool, createdAt: now, updatedAt: now }, d.items);
-    return id;
   }
 
   onMount(async () => {
@@ -88,7 +94,7 @@
       let migrated = false;
       try {
         const old = localStorage.getItem('tierlab-v1');
-        if (old) migrated = !!(await createFrom(JSON.parse(old)));
+        if (old) migrated = !!(await saveShared(JSON.parse(old)));
       } catch {
         /* rien à reprendre */
       }
@@ -130,7 +136,7 @@
     } catch {
       return false;
     }
-    const id = await createFrom(raw);
+    const id = await saveShared(raw);
     if (!id) return false;
     go(listPath(id));
     return true;
@@ -147,7 +153,7 @@
   async function duplicate(l: TierList) {
     menu = null;
     const shared = await sharedOf(l);
-    const id = shared && (await createFrom({ ...shared, title: `${l.title || 'Sans titre'} (copie)` }));
+    const id = shared && (await saveShared(shared, `${l.title || 'Sans titre'} (copie)`));
     if (id) {
       toast('Liste dupliquée');
       await refresh();
@@ -190,20 +196,17 @@
 
 <header class="top">
   <div class="brand">
-    <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"
-      ><rect x="2" y="3" width="20" height="5" rx="1.5" fill="#ff7f7f" /><rect x="2" y="10" width="14" height="5" rx="1.5" fill="#ffdf7f" /><rect
-        x="2"
-        y="17"
-        width="8"
-        height="5"
-        rx="1.5"
-        fill="#7fbfff"
-      /></svg
-    >Tierlab
+    <Logo />
   </div>
   <label class="lsearch">
     <Icon name="search" />
-    <input type="search" placeholder="Rechercher une liste…" aria-label="Rechercher une liste" bind:this={search} bind:value={q} />
+    <input
+      type="search"
+      placeholder={tab === 'community' ? 'Rechercher dans la communauté…' : 'Rechercher une liste…'}
+      aria-label={tab === 'community' ? 'Rechercher dans la communauté' : 'Rechercher une liste'}
+      bind:this={search}
+      bind:value={q}
+    />
     <kbd aria-hidden="true">/</kbd>
   </label>
   <div class="acts">
@@ -233,16 +236,30 @@
 
   <section>
     <div class="lib-row">
-      <h1 class="lib-h">Mes tier listes</h1>
-      {#if lists}<span class="count">{lists.length}</span>{/if}
-      <div class="sort" role="group" aria-label="Trier les listes">
-        {#each SORTS as s (s.id)}
-          <button aria-pressed={sort === s.id} onclick={() => setSort(s.id)}>{s.label}</button>
-        {/each}
-      </div>
+      <nav class="ltabs" aria-label="Listes">
+        <a class="lib-h" href="#/" aria-current={tab === 'mine' ? 'page' : undefined}
+          >Mes tier listes{#if lists}<span class="count">{lists.length}</span>{/if}</a
+        >
+        <a class="lib-h" href="#{COMMUNITY_PATH}" aria-current={tab === 'community' ? 'page' : undefined}>Communauté</a>
+      </nav>
+      {#if tab === 'community'}
+        <div class="sort" role="group" aria-label="Trier les listes publiées">
+          {#each CSORTS as s (s.id)}
+            <button aria-pressed={csort === s.id} onclick={() => setCsort(s.id)}>{s.label}</button>
+          {/each}
+        </div>
+      {:else}
+        <div class="sort" role="group" aria-label="Trier les listes">
+          {#each SORTS as s (s.id)}
+            <button aria-pressed={sort === s.id} onclick={() => setSort(s.id)}>{s.label}</button>
+          {/each}
+        </div>
+      {/if}
     </div>
 
-    {#if lists === null}
+    {#if tab === 'community'}
+      <CommunityGrid {q} sort={csort} />
+    {:else if lists === null}
       <p class="loading">Chargement…</p>
     {:else}
       <ul class="lgrid">

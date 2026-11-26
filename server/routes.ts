@@ -1,6 +1,7 @@
 import { animeSource, charactersSource, mangaSource } from './anilist';
 import { createApi } from './api';
 import { catalogRoutes, type CatalogSources } from './catalog';
+import { communityRoutes } from './community';
 import { deezerImages, musicRoutes } from './deezer';
 import { liveRoutes } from './live';
 import { imageRoutes } from './media';
@@ -19,4 +20,4 @@ const catalogs: CatalogSources = {
 const imageHosts = [...deezerImages, ...Object.values(catalogs).flatMap((s) => s.images)];
 
 /** Toutes les routes /api de l'application, partagées par le Worker et par Vite. */
-export const handleApi = createApi([...musicRoutes, ...catalogRoutes(catalogs), ...imageRoutes(imageHosts), ...liveRoutes]);
+export const handleApi = createApi([...musicRoutes, ...catalogRoutes(catalogs), ...imageRoutes(imageHosts), ...liveRoutes, ...communityRoutes]);

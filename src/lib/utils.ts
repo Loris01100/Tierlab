@@ -42,8 +42,7 @@ export function setPref(key: string, value: unknown): void {
 
 export const plural = (n: number, word: string): string => `${n} ${word}${n > 1 ? 's' : ''}`;
 
-/** Texte sans accents ni majuscules, pour les recherches tolérantes. */
-export const fold = (s: string): string => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+export { fold } from '../../shared/rules';
 
 const rel = new Intl.RelativeTimeFormat('fr', { numeric: 'auto' });
 const day = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short' });
