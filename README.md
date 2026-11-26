@@ -35,7 +35,7 @@ déclarés par chaque module (redirections revérifiées à chaque étape).
 
 ### Musique (Deezer)
 
-Bouton **Musique** dans le dock de l'éditeur : recherche d'un artiste, choix des sorties (albums, singles et EP, compilations),
+Onglet **Musique** de la modale **Catalogues** (dock de l'éditeur) : recherche d'un artiste, choix des sorties (albums, singles et EP, compilations),
 puis import d'une vignette par album ou par titre, avec la pochette et le nom.
 Source : l'API publique Deezer (https://developers.deezer.com/api), gratuite, sans compte ni clé.
 Quota : 50 requêtes par 5 secondes, géré par le serveur (attente et nouvel essai).
@@ -45,7 +45,7 @@ Routes : `GET /api/music/artists?q=`, `/api/music/artists/:id/albums?groups=albu
 
 ### Catalogues (Pokémon, anime, manga, personnages, livres)
 
-Bouton **Catalogues** dans le dock : choix d'une catégorie, recherche ou liste prédéfinie (génération Pokémon, top 100…),
+Bouton **Catalogues** dans le dock : choix d'une catégorie (la musique y est un onglet à part, avec son propre parcours), recherche ou liste prédéfinie (génération Pokémon, top 100…),
 cases à cocher (la sélection est conservée d'une recherche et d'une catégorie à l'autre), puis import en vignettes image + nom.
 Sources publiques, sans clé :
 
@@ -86,7 +86,7 @@ src/
     EditorPage.svelte      chargement d'une liste depuis IndexedDB
     Editor.svelte          éditeur : en-tête, rangs, clavier, collage, dépôt de fichiers
     Row, Zone, Tile, Dock, Swatches, Modal, Icon
-    modals/                rang, vignette, partage, export, nouvelle liste, import, musique, catalogues
+    modals/                rang, vignette, partage, export, nouvelle liste, import, catalogues (dont l'onglet musique)
 ```
 
 ## Stockage

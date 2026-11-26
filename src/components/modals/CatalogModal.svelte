@@ -8,11 +8,14 @@
   import { toast } from '../../lib/toast.svelte';
   import { plural } from '../../lib/utils';
   import Modal from '../Modal.svelte';
+  import MusicPanel from './MusicPanel.svelte';
 
   let { ed, onclose }: { ed: Editor; onclose: () => void } = $props();
 
   const IDS = Object.keys(CATALOGS) as CatalogId[];
 
+  /** La musique a son propre parcours (artiste → sorties) : elle n'est pas un catalogue générique. */
+  let tab = $state<CatalogId | 'music'>('music');
   let source = $state<CatalogId>('pokemon');
   const def = $derived(CATALOGS[source]);
   let q = $state('');
@@ -82,7 +85,9 @@
     picked = m;
   }
 
-  function pickSource(id: CatalogId) {
+  function pickTab(id: CatalogId | 'music') {
+    tab = id;
+    if (id === 'music') return;
     source = id;
     listId = null;
   }
@@ -137,65 +142,72 @@
 
 <Modal title="Catalogues" {onclose}>
   <div class="seg" role="radiogroup" aria-label="Catégorie">
-    {#each IDS as id (id)}
-      <label class:on={source === id}>
-        <input type="radio" name="catSrc" value={id} checked={source === id} onchange={() => pickSource(id)} disabled={busy} />
-        {CATALOGS[id].label}
+    {#snippet choice(id: CatalogId | 'music', label: string)}
+      <label class:on={tab === id}>
+        <input type="radio" name="catSrc" value={id} checked={tab === id} onchange={() => pickTab(id)} disabled={busy} />
+        {label}
       </label>
-    {/each}
+    {/snippet}
+    {@render choice('music', 'Musique')}
+    {#each IDS as id (id)}{@render choice(id, CATALOGS[id].label)}{/each}
   </div>
-  <p class="small">{def.hint} Source : {def.credit}.</p>
 
-  <label for="cQ">Recherche</label>
-  <input
-    type="text"
-    id="cQ"
-    bind:value={q}
-    oninput={() => (listId = null)}
-    placeholder={def.placeholder}
-    autocomplete="off"
-    maxlength="100"
-    disabled={busy}
-  />
-  {#if def.lists.length}
-    <div class="seg lists" aria-label="Listes prédéfinies">
-      {#each def.lists as l (l.id)}
-        <button class="btn sm" class:on={listId === l.id} aria-pressed={listId === l.id} onclick={() => pickList(l.id)} disabled={busy}>
-          {l.label}
-        </button>
-      {/each}
+  {#if tab === 'music'}
+    <MusicPanel {ed} {onclose} />
+  {:else}
+    <p class="small">{def.hint} Source : {def.credit}.</p>
+
+    <label for="cQ">Recherche</label>
+    <input
+      type="text"
+      id="cQ"
+      bind:value={q}
+      oninput={() => (listId = null)}
+      placeholder={def.placeholder}
+      autocomplete="off"
+      maxlength="100"
+      disabled={busy}
+    />
+    {#if def.lists.length}
+      <div class="seg lists" aria-label="Listes prédéfinies">
+        {#each def.lists as l (l.id)}
+          <button class="btn sm" class:on={listId === l.id} aria-pressed={listId === l.id} onclick={() => pickList(l.id)} disabled={busy}>
+            {l.label}
+          </button>
+        {/each}
+      </div>
+    {/if}
+
+    {#if loading}
+      <p class="small">Chargement…</p>
+    {:else if err}
+      <p class="small err">{err}</p>
+    {:else if hits.length}
+      <div class="mhead">
+        <span class="small">{plural(hits.length, 'résultat')}</span>
+        <button class="btn sm" onclick={toggleShown} disabled={busy}>{allShown ? 'Tout décocher' : 'Tout cocher'}</button>
+      </div>
+      <ul class="mlist albums">
+        {#each hits as h (h.id)}
+          <li>
+            <label class="mrow-b">
+              <input type="checkbox" checked={picked.has(keyOf(h))} onchange={() => toggle(h)} disabled={busy} />
+              {#if h.image}<img class="cov" src={imageUrl(h.image)} alt="" loading="lazy" />{:else}<span class="cov"></span>{/if}
+              <span class="mtxt"><b>{h.name}</b>{#if h.detail}<small>{h.detail}</small>{/if}</span>
+            </label>
+          </li>
+        {/each}
+      </ul>
+    {/if}
+
+    {#if tooMany}<p class="small err">{picked.size} vignettes : c’est au-delà de la limite de {LIMITS.importApi}. Décochez des éléments.</p>{/if}
+    {#if progress}<p class="small" aria-live="polite">{progress}</p>{/if}
+    <div class="foot">
+      {#if picked.size}<button class="btn l" onclick={() => (picked = new Map())} disabled={busy}>Vider la sélection</button>{/if}
+      <button class="btn" onclick={onclose}>Annuler</button>
+      <button class="btn pri" onclick={run} disabled={busy || !picked.size || tooMany}>
+        {busy ? 'Import…' : `Ajouter ${plural(picked.size, 'vignette')}`}
+      </button>
     </div>
   {/if}
-
-  {#if loading}
-    <p class="small">Chargement…</p>
-  {:else if err}
-    <p class="small err">{err}</p>
-  {:else if hits.length}
-    <div class="mhead">
-      <span class="small">{plural(hits.length, 'résultat')}</span>
-      <button class="btn sm" onclick={toggleShown} disabled={busy}>{allShown ? 'Tout décocher' : 'Tout cocher'}</button>
-    </div>
-    <ul class="mlist albums">
-      {#each hits as h (h.id)}
-        <li>
-          <label class="mrow-b">
-            <input type="checkbox" checked={picked.has(keyOf(h))} onchange={() => toggle(h)} disabled={busy} />
-            {#if h.image}<img class="cov" src={imageUrl(h.image)} alt="" loading="lazy" />{:else}<span class="cov"></span>{/if}
-            <span class="mtxt"><b>{h.name}</b>{#if h.detail}<small>{h.detail}</small>{/if}</span>
-          </label>
-        </li>
-      {/each}
-    </ul>
-  {/if}
-
-  {#if tooMany}<p class="small err">{picked.size} vignettes : c’est au-delà de la limite de {LIMITS.importApi}. Décochez des éléments.</p>{/if}
-  {#if progress}<p class="small" aria-live="polite">{progress}</p>{/if}
-  <div class="foot">
-    {#if picked.size}<button class="btn l" onclick={() => (picked = new Map())} disabled={busy}>Vider la sélection</button>{/if}
-    <button class="btn" onclick={onclose}>Annuler</button>
-    <button class="btn pri" onclick={run} disabled={busy || !picked.size || tooMany}>
-      {busy ? 'Import…' : `Ajouter ${plural(picked.size, 'vignette')}`}
-    </button>
-  </div>
 </Modal>

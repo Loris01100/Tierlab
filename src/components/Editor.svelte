@@ -13,7 +13,6 @@
   import Icon from './Icon.svelte';
   import CatalogModal from './modals/CatalogModal.svelte';
   import ExportModal from './modals/ExportModal.svelte';
-  import MusicModal from './modals/MusicModal.svelte';
   import RowModal from './modals/RowModal.svelte';
   import ShareModal from './modals/ShareModal.svelte';
   import TileModal from './modals/TileModal.svelte';
@@ -25,7 +24,6 @@
     | { kind: 'row'; id: string }
     | { kind: 'tile'; id: string }
     | { kind: 'share' }
-    | { kind: 'music' }
     | { kind: 'catalog' }
     | { kind: 'export'; blob: Blob }
     | null;
@@ -341,7 +339,6 @@
   <Dock
     {ed}
     onfiles={(f) => importFiles(f)}
-    onmusic={() => (modal = { kind: 'music' })}
     oncatalog={() => (modal = { kind: 'catalog' })}
     ontexts={(t) => addTexts(t)}
     onedit={() => ed.selId && (modal = { kind: 'tile', id: ed.selId })}
@@ -363,8 +360,6 @@
       delSel();
     }}
   />
-{:else if modal?.kind === 'music'}
-  <MusicModal {ed} onclose={() => (modal = null)} />
 {:else if modal?.kind === 'catalog'}
   <CatalogModal {ed} onclose={() => (modal = null)} />
 {:else if modal?.kind === 'share'}

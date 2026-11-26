@@ -14,8 +14,8 @@
   } from '../../lib/music';
   import { toast } from '../../lib/toast.svelte';
   import { plural } from '../../lib/utils';
-  import Modal from '../Modal.svelte';
 
+  /** Onglet « Musique » de la modale Catalogues : parcours artiste → sorties → vignettes (Deezer). */
   let { ed, onclose }: { ed: Editor; onclose: () => void } = $props();
 
   const GROUPS: { key: AlbumGroup; label: string }[] = [
@@ -154,71 +154,70 @@
   }
 </script>
 
-<Modal title={artist ? artist.name : 'Musique'} {onclose}>
-  {#if !artist}
-    <p class="small">Recherchez un artiste (catalogue Deezer) pour importer les pochettes et les noms de ses albums ou de ses titres.</p>
-    <label for="mQ">Artiste</label>
-    <input type="text" id="mQ" bind:value={q} placeholder="Ex. Daft Punk" autocomplete="off" maxlength="100" />
-    {#if searching}<p class="small">Recherche…</p>{:else if searchErr}<p class="small err">{searchErr}</p>{/if}
-    {#if artists.length}
-      <ul class="mlist">
-        {#each artists as a (a.id)}
-          <li>
-            <button class="mrow-b" onclick={() => (artist = a)}>
-              {#if a.image}<img class="av" src={imageUrl(a.image)} alt="" loading="lazy" />{:else}<span class="av"></span>{/if}
-              <span class="mtxt"><b>{a.name}</b>{#if a.albums}<small>{plural(a.albums, 'sortie')}</small>{/if}</span>
-            </button>
-          </li>
-        {/each}
-      </ul>
-    {/if}
-    <div class="foot"><button class="btn" onclick={onclose}>Fermer</button></div>
-  {:else}
-    <span class="lbl">Sorties</span>
-    <div class="chk">
-      {#each GROUPS as g (g.key)}
-        <label><input type="checkbox" value={g.key} bind:group={groups} disabled={busy} />{g.label}</label>
+{#if !artist}
+  <p class="small">Recherchez un artiste pour importer les pochettes et les noms de ses albums ou de ses titres. Source : Deezer.</p>
+  <label for="mQ">Artiste</label>
+  <input type="text" id="mQ" bind:value={q} placeholder="Ex. Daft Punk" autocomplete="off" maxlength="100" />
+  {#if searching}<p class="small">Recherche…</p>{:else if searchErr}<p class="small err">{searchErr}</p>{/if}
+  {#if artists.length}
+    <ul class="mlist">
+      {#each artists as a (a.id)}
+        <li>
+          <button class="mrow-b" onclick={() => (artist = a)}>
+            {#if a.image}<img class="av" src={imageUrl(a.image)} alt="" loading="lazy" />{:else}<span class="av"></span>{/if}
+            <span class="mtxt"><b>{a.name}</b>{#if a.albums}<small>{plural(a.albums, 'sortie')}</small>{/if}</span>
+          </button>
+        </li>
       {/each}
-    </div>
-    <span class="lbl">Une vignette par</span>
-    <div class="chk">
-      <label><input type="radio" value="albums" bind:group={mode} disabled={busy} />Album (pochette + titre de l’album)</label>
-      <label><input type="radio" value="tracks" bind:group={mode} disabled={busy} />Titre (pochette + nom du morceau)</label>
-      {#if mode === 'tracks'}<label><input type="checkbox" bind:checked={dedupe} disabled={busy} />Ignorer les titres en double</label>{/if}
-    </div>
-
-    {#if loading}
-      <p class="small">Chargement de la discographie…</p>
-    {:else if loadErr}
-      <p class="small err">{loadErr}</p>
-    {:else if !albums.length}
-      <p class="small">Aucune sortie dans ces catégories.</p>
-    {:else}
-      <div class="mhead">
-        <span class="small">{plural(picked.size, 'sortie')} sur {albums.length}</span>
-        <button class="btn sm" onclick={toggleAll} disabled={busy}>{picked.size === albums.length ? 'Tout décocher' : 'Tout cocher'}</button>
-      </div>
-      <ul class="mlist albums">
-        {#each albums as a (a.id)}
-          <li>
-            <label class="mrow-b">
-              <input type="checkbox" checked={picked.has(a.id)} onchange={() => toggle(a.id)} disabled={busy} />
-              {#if a.image}<img class="cov" src={imageUrl(a.image)} alt="" loading="lazy" />{:else}<span class="cov"></span>{/if}
-              <span class="mtxt"><b>{a.name}</b><small>{TYPE_LABEL[a.type] ?? a.type}{a.year ? ` · ${a.year}` : ''}</small></span>
-            </label>
-          </li>
-        {/each}
-      </ul>
-    {/if}
-
-    {#if tooMany}<p class="small err">{chosen.length} vignettes : c’est au-delà de la limite de {LIMITS.importApi}. Décochez des sorties.</p>{/if}
-    {#if progress}<p class="small" aria-live="polite">{progress}</p>{/if}
-    <div class="foot">
-      <button class="btn l" onclick={() => ((artist = null), (albums = []))} disabled={busy}>Changer d’artiste</button>
-      <button class="btn" onclick={onclose}>Annuler</button>
-      <button class="btn pri" onclick={run} disabled={busy || loading || !chosen.length || tooMany}>
-        {busy ? 'Import…' : mode === 'tracks' ? `Ajouter les titres (${plural(chosen.length, 'sortie')})` : `Ajouter ${plural(chosen.length, 'vignette')}`}
-      </button>
-    </div>
+    </ul>
   {/if}
-</Modal>
+  <div class="foot"><button class="btn" onclick={onclose}>Fermer</button></div>
+{:else}
+  <p class="small">Artiste : <b>{artist.name}</b></p>
+  <span class="lbl">Sorties</span>
+  <div class="chk">
+    {#each GROUPS as g (g.key)}
+      <label><input type="checkbox" value={g.key} bind:group={groups} disabled={busy} />{g.label}</label>
+    {/each}
+  </div>
+  <span class="lbl">Une vignette par</span>
+  <div class="chk">
+    <label><input type="radio" value="albums" bind:group={mode} disabled={busy} />Album (pochette + titre de l’album)</label>
+    <label><input type="radio" value="tracks" bind:group={mode} disabled={busy} />Titre (pochette + nom du morceau)</label>
+    {#if mode === 'tracks'}<label><input type="checkbox" bind:checked={dedupe} disabled={busy} />Ignorer les titres en double</label>{/if}
+  </div>
+
+  {#if loading}
+    <p class="small">Chargement de la discographie…</p>
+  {:else if loadErr}
+    <p class="small err">{loadErr}</p>
+  {:else if !albums.length}
+    <p class="small">Aucune sortie dans ces catégories.</p>
+  {:else}
+    <div class="mhead">
+      <span class="small">{plural(picked.size, 'sortie')} sur {albums.length}</span>
+      <button class="btn sm" onclick={toggleAll} disabled={busy}>{picked.size === albums.length ? 'Tout décocher' : 'Tout cocher'}</button>
+    </div>
+    <ul class="mlist albums">
+      {#each albums as a (a.id)}
+        <li>
+          <label class="mrow-b">
+            <input type="checkbox" checked={picked.has(a.id)} onchange={() => toggle(a.id)} disabled={busy} />
+            {#if a.image}<img class="cov" src={imageUrl(a.image)} alt="" loading="lazy" />{:else}<span class="cov"></span>{/if}
+            <span class="mtxt"><b>{a.name}</b><small>{TYPE_LABEL[a.type] ?? a.type}{a.year ? ` · ${a.year}` : ''}</small></span>
+          </label>
+        </li>
+      {/each}
+    </ul>
+  {/if}
+
+  {#if tooMany}<p class="small err">{chosen.length} vignettes : c’est au-delà de la limite de {LIMITS.importApi}. Décochez des sorties.</p>{/if}
+  {#if progress}<p class="small" aria-live="polite">{progress}</p>{/if}
+  <div class="foot">
+    <button class="btn l" onclick={() => ((artist = null), (albums = []))} disabled={busy}>Changer d’artiste</button>
+    <button class="btn" onclick={onclose}>Annuler</button>
+    <button class="btn pri" onclick={run} disabled={busy || loading || !chosen.length || tooMany}>
+      {busy ? 'Import…' : mode === 'tracks' ? `Ajouter les titres (${plural(chosen.length, 'sortie')})` : `Ajouter ${plural(chosen.length, 'vignette')}`}
+    </button>
+  </div>
+{/if}
