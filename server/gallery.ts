@@ -58,6 +58,13 @@ const SCHEMA = [
 
 const CARD_COLS = 'id, title, author, created, updated, tiles, tiers, copies, preview';
 
+/** Vérifie qu'une ligne de list (avec sa colonne reports) existe et n'est pas masquée, sinon 404. */
+function visibleRow(row: Record<string, unknown> | undefined): Record<string, unknown> {
+  if (!row) throw new HttpError(404, 'Cette liste n’existe pas ou a été retirée');
+  if (Number(row.reports) >= COMMUNITY.hideAt) throw new HttpError(404, 'Cette liste a été retirée après des signalements');
+  return row;
+}
+
 export class Gallery {
   readonly #sql: Sql;
   readonly #env: Env;
@@ -109,10 +116,7 @@ export class Gallery {
 
   /** Ligne d'une liste visible (non masquée par les signalements), ou 404. */
   #visible(id: string, cols: string): Record<string, unknown> {
-    const row = PUB_RE.test(id) ? this.#rows(`SELECT ${cols}, reports FROM list WHERE id = ?`, id)[0] : undefined;
-    if (!row) throw new HttpError(404, 'Cette liste n’existe pas ou a été retirée');
-    if (Number(row.reports) >= COMMUNITY.hideAt) throw new HttpError(404, 'Cette liste a été retirée après des signalements');
-    return row;
+    return visibleRow(PUB_RE.test(id) ? this.#rows(`SELECT ${cols}, reports FROM list WHERE id = ?`, id)[0] : undefined);
   }
 
   #get(ctx: Ctx): CommunityList {
@@ -122,9 +126,13 @@ export class Gallery {
 
   #img(ctx: Ctx): Response {
     const { id, item } = ctx.params;
-    this.#visible(id, 'id');
-    const row = ID_RE.test(item) ? this.#rows('SELECT type, data FROM img WHERE list = ? AND id = ?', id, item)[0] : undefined;
-    if (!row) return json(404, { error: 'Image introuvable' });
+    // Une seule requête : la liste (visibilité) et l'image jointe, absente (NULL) si l'id ne correspond à rien.
+    const row = visibleRow(
+      PUB_RE.test(id) && ID_RE.test(item)
+        ? this.#rows('SELECT l.reports, i.type, i.data FROM list l LEFT JOIN img i ON i.list = l.id AND i.id = ? WHERE l.id = ?', item, id)[0]
+        : undefined,
+    );
+    if (row.data == null) return json(404, { error: 'Image introuvable' });
     // Une vignette est immuable (nouvel id à chaque modification) : cache long.
     return new Response(row.data as ArrayBuffer, { headers: { 'Content-Type': String(row.type), 'Cache-Control': 'public, max-age=31536000, immutable' } });
   }

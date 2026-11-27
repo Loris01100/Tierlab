@@ -19,9 +19,21 @@ const ROUTES = {
 
 export type CommunityAction = keyof typeof ROUTES;
 
+/**
+ * Cache-Control des lectures JSON qui peuvent être partagées. La première page de la galerie est la plus demandée :
+ * 30 s de cache (navigateur et datacenter, voir server/worker.ts) absorbent les pics, au prix d'une nouvelle
+ * publication visible avec au plus 30 s de retard. Les autres réponses JSON restent en no-store.
+ */
+const CACHE: Partial<Record<CommunityAction, string>> = { list: 'public, max-age=30' };
+
 /** Les routes de la galerie avec un gestionnaire par action (le type impose qu'aucune ne manque). */
 export function routesFor(handlers: Record<CommunityAction, Handler>): Route[] {
-  return (Object.keys(ROUTES) as CommunityAction[]).map((k) => ({ method: ROUTES[k][0], path: ROUTES[k][1], handler: handlers[k] }));
+  return (Object.keys(ROUTES) as CommunityAction[]).map((k) => ({
+    method: ROUTES[k][0],
+    path: ROUTES[k][1],
+    cache: CACHE[k],
+    handler: handlers[k],
+  }));
 }
 
 const forward = (ctx: Ctx): Promise<Response> => objectStub(ctx.env, 'GALLERY', 'main').fetch(ctx.request);
