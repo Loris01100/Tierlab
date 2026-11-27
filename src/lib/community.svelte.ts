@@ -16,8 +16,14 @@ import { fgFor, getPref, plural, setPref, uid } from './utils';
 
 const KEY = 'tierlab-published';
 
+/**
+ * Publication faite depuis cet appareil. v : date de la dernière mise à jour envoyée, ajoutée en ?v= à la lecture
+ * de la liste pour passer outre la copie en cache (60 s, server/community.ts) et voir tout de suite ses changements.
+ */
+type Mine = Published & { v?: number };
+
 /** Publications faites depuis cet appareil : id de la liste locale → publication. */
-export const published = $state<Record<string, Published>>(getPref(KEY, {}));
+export const published = $state<Record<string, Mine>>(getPref(KEY, {}));
 
 const savePublished = () => setPref(KEY, $state.snapshot(published));
 
@@ -51,7 +57,10 @@ export async function publish(ed: Editor, author: string): Promise<Published> {
 /** Remplace la publication par l'état actuel de la liste. */
 export async function republish(ed: Editor, author: string): Promise<void> {
   const p = published[ed.id];
-  if (p) await apiPost(`/community/${p.id}/update`, await publishBody(ed, author, p.token));
+  if (!p) return;
+  await apiPost(`/community/${p.id}/update`, await publishBody(ed, author, p.token));
+  p.v = Date.now();
+  savePublished();
 }
 
 /** Retire la publication de la liste locale listId (déjà retirée côté serveur : on oublie simplement le jeton). */
@@ -70,7 +79,11 @@ export async function unpublish(listId: string): Promise<void> {
 export const fetchCommunityPage = (q: string, sort: CommunitySort, page: number, signal?: AbortSignal): Promise<CommunityPage> =>
   apiGet<CommunityPage>('/community', { q: q || undefined, sort, page: page || undefined }, signal);
 
-export const fetchCommunityList = (id: string, signal?: AbortSignal): Promise<CommunityList> => apiGet<CommunityList>(`/community/${id}`, undefined, signal);
+/** Lecture d'une liste publiée ; celles mises à jour depuis cet appareil passent outre le cache avec ?v=. */
+export function fetchCommunityList(id: string, signal?: AbortSignal): Promise<CommunityList> {
+  const own = ownerOf(id);
+  return apiGet<CommunityList>(`/community/${id}`, { v: own ? published[own].v : undefined }, signal);
+}
 
 /**
  * « Faire ma version » : copie la liste publiée dans la bibliothèque locale ; renvoie l'id de la nouvelle liste.

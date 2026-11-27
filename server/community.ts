@@ -22,11 +22,15 @@ const ROUTES = {
 export type CommunityAction = keyof typeof ROUTES;
 
 /**
- * Cache-Control des lectures JSON qui peuvent être partagées. La première page de la galerie est la plus demandée :
- * 30 s de cache (navigateur et datacenter, voir server/worker.ts) absorbent les pics, au prix d'une nouvelle
- * publication visible avec au plus 30 s de retard. Les autres réponses JSON restent en no-store.
+ * Cache-Control des lectures JSON qui peuvent être partagées (navigateur et datacenter, voir server/worker.ts).
+ * - list : la première page de la galerie est la plus demandée ; 30 s absorbent les pics, au prix d'une nouvelle
+ *   publication visible avec au plus 30 s de retard.
+ * - get : une liste populaire est servie depuis le datacenter du visiteur au lieu du Durable Object unique ;
+ *   une modification ou un retrait apparaît au plus 60 s plus tard (l'auteur contourne ce délai avec ?v=,
+ *   voir fetchCommunityList dans src/lib/community.svelte.ts).
+ * Les autres réponses JSON restent en no-store.
  */
-const CACHE: Partial<Record<CommunityAction, string>> = { list: 'public, max-age=30' };
+const CACHE: Partial<Record<CommunityAction, string>> = { list: 'public, max-age=30', get: 'public, max-age=60' };
 
 /** Les routes de la galerie avec un gestionnaire par action (le type impose qu'aucune ne manque). */
 export function routesFor(handlers: Record<CommunityAction, Handler>): Route[] {
