@@ -1,5 +1,6 @@
 import type { Ctx, Handler, Route } from './api';
 import { objectStub } from './objects';
+import { cleanPublish, packPublish, PACKED, readBody, readToken } from './publish';
 
 /**
  * Routes de la galerie communautaire. Toutes les listes publiées vivent dans un seul Durable Object (server/gallery.ts),
@@ -39,14 +40,32 @@ export function routesFor(handlers: Record<CommunityAction, Handler>): Route[] {
 
 const forward = (ctx: Ctx): Promise<Response> => objectStub(ctx.env, 'GALLERY', 'main').fetch(ctx.request);
 
+/** Envoie à l'objet un corps déjà validé, avec l'adresse du client (limite par adresse, empreinte seulement). */
+function forwardBody(ctx: Ctx, type: string, body: string | Uint8Array): Promise<Response> {
+  const headers: Record<string, string> = { 'Content-Type': type };
+  const ip = ctx.request.headers.get('CF-Connecting-IP');
+  if (ip) headers['CF-Connecting-IP'] = ip;
+  return objectStub(ctx.env, 'GALLERY', 'main').fetch(new Request(ctx.request.url, { method: 'POST', headers, body }));
+}
+
+/**
+ * Publication et mise à jour : lecture, décodage et vérification des images ici, dans le Worker (sans état,
+ * en parallèle), pour ne pas bloquer le Durable Object unique de la galerie (voir server/publish.ts).
+ */
+const publishClean = async (ctx: Ctx): Promise<Response> => forwardBody(ctx, PACKED, packPublish(cleanPublish(await readBody(ctx))));
+
+/** Retrait : seul le jeton est transmis. */
+const removeClean = async (ctx: Ctx): Promise<Response> =>
+  forwardBody(ctx, 'application/json', JSON.stringify({ token: readToken(await readBody(ctx, 4096)) }));
+
 export const communityRoutes: Route[] = routesFor({
   list: forward,
-  publish: forward,
+  publish: publishClean,
   get: forward,
   img: forward,
   thumb: forward,
   copy: forward,
   report: forward,
-  update: forward,
-  remove: forward,
+  update: publishClean,
+  remove: removeClean,
 });

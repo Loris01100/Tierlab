@@ -1,6 +1,7 @@
 import { createApi, HttpError, json, type Ctx, type Env } from './api';
 import { routesFor } from './community';
 import { randomId } from './objects';
+import { PACKED, unpackPublish, type Cleaned, type Image } from './publish';
 import {
   COMMUNITY,
   PUB_RE,
@@ -10,7 +11,7 @@ import {
   type PreviewTier,
   type Published,
 } from '../shared/community';
-import { cleanBoard, cleanItem, ID_RE, LIVE, type LiveBoard, type LiveItem } from '../shared/live';
+import { ID_RE, type LiveBoard } from '../shared/live';
 import { fold } from '../shared/rules';
 
 /*
@@ -30,18 +31,6 @@ interface Sql {
 }
 export interface GalleryState {
   storage: { sql: Sql };
-}
-
-interface Image {
-  type: string;
-  data: Uint8Array;
-}
-
-interface Cleaned {
-  author: string;
-  board: LiveBoard;
-  images: Map<string, Image>;
-  thumb: Image | null;
 }
 
 const SCHEMA = [
@@ -158,7 +147,7 @@ export class Gallery {
 
   async #publish(ctx: Ctx): Promise<Published> {
     const ip = await ipHash(ctx.request);
-    const data = cleanPublish(await readBody(ctx));
+    const data = await readPacked(ctx);
     const id = randomId(16);
     const token = randomId(32);
     const tokenHash = await sha256(token);
@@ -182,9 +171,8 @@ export class Gallery {
   }
 
   async #update(ctx: Ctx): Promise<null> {
-    const raw = await readBody(ctx);
-    const id = await this.#checkOwner(ctx.params.id, raw.token);
-    const data = cleanPublish(raw);
+    const data = await readPacked(ctx);
+    const id = await this.#checkOwner(ctx.params.id, data.token);
     this.#sql.exec('UPDATE list SET title = ?, author = ?, search = ?, board = ?, preview = ?, tiles = ?, tiers = ?, updated = ? WHERE id = ?', ...listColumns(data), Date.now(), id);
     this.#sql.exec('DELETE FROM img WHERE list = ?', id);
     this.#putImages(id, data);
@@ -192,8 +180,7 @@ export class Gallery {
   }
 
   async #remove(ctx: Ctx): Promise<null> {
-    const raw = await readBody(ctx);
-    const id = await this.#checkOwner(ctx.params.id, raw.token);
+    const id = await this.#checkOwner(ctx.params.id, await readToken(ctx));
     for (const t of ['list WHERE id', 'img WHERE list', 'mark WHERE list']) this.#sql.exec(`DELETE FROM ${t} = ?`, id);
     return null;
   }
@@ -227,74 +214,16 @@ export class Gallery {
 
 /* ---------- utilitaires ---------- */
 
-type Raw = Record<string, unknown>;
-const isObj = (v: unknown): v is Raw => !!v && typeof v === 'object' && !Array.isArray(v);
-
-async function readBody(ctx: Ctx): Promise<Raw> {
-  if (Number(ctx.request.headers.get('Content-Length') ?? 0) > COMMUNITY.body) throw new HttpError(413, 'Liste trop lourde pour être publiée');
-  const text = await ctx.request.text();
-  if (text.length > COMMUNITY.body) throw new HttpError(413, 'Liste trop lourde pour être publiée');
-  let v: unknown;
-  try {
-    v = JSON.parse(text);
-  } catch {
-    throw new HttpError(400, 'JSON invalide');
-  }
-  if (!isObj(v)) throw new HttpError(400, 'Liste invalide');
-  return v;
+/** Corps d'une publication ou d'une mise à jour, déjà validé par le Worker (server/publish.ts). */
+async function readPacked(ctx: Ctx): Promise<Cleaned> {
+  if (ctx.request.headers.get('Content-Type') !== PACKED) throw new HttpError(400, 'Liste invalide');
+  return unpackPublish(await ctx.request.arrayBuffer());
 }
 
-const IMG_SRC = /^data:(image\/(?:png|jpeg|webp|gif));base64,([A-Za-z0-9+/]+={0,2})$/;
-
-function decodeImage(src: unknown, max: number = COMMUNITY.image): Image | null {
-  const m = typeof src === 'string' ? IMG_SRC.exec(src) : null;
-  if (!m || (m[2].length * 3) / 4 > max) return null;
-  try {
-    const bin = atob(m[2]);
-    const data = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) data[i] = bin.charCodeAt(i);
-    return isImage(m[1], data) ? { type: m[1], data } : null;
-  } catch {
-    return null;
-  }
-}
-
-/** Vérifie la signature du fichier : la galerie ne doit héberger que de vraies images. */
-function isImage(type: string, d: Uint8Array): boolean {
-  const at = (i: number, ...bytes: number[]) => bytes.every((b, k) => d[i + k] === b);
-  if (type === 'image/png') return at(0, 0x89, 0x50, 0x4e, 0x47);
-  if (type === 'image/jpeg') return at(0, 0xff, 0xd8, 0xff);
-  if (type === 'image/gif') return at(0, 0x47, 0x49, 0x46, 0x38);
-  return at(0, 0x52, 0x49, 0x46, 0x46) && at(8, 0x57, 0x45, 0x42, 0x50);
-}
-
-/** Valide un corps de publication (données non fiables) : liste au format d'échange + pseudo. */
-function cleanPublish(raw: Raw): Cleaned {
-  const l = isObj(raw.list) ? raw.list : null;
-  if (!l || !Array.isArray(l.tiers) || !isObj(l.items)) throw new HttpError(400, 'Liste invalide');
-  const items: LiveItem[] = [];
-  const images = new Map<string, Image>();
-  for (const [id, v] of Object.entries(l.items)) {
-    if (items.length >= LIVE.items) break;
-    if (!ID_RE.test(id) || !isObj(v)) continue;
-    if (v.type === 'img') {
-      const img = images.size < COMMUNITY.images ? decodeImage(v.src) : null;
-      if (!img) continue;
-      images.set(id, img);
-    }
-    const it = cleanItem({ ...v, id });
-    if (it) items.push(it);
-  }
-  const tiers = l.tiers.map((t, i) => (isObj(t) ? { ...t, id: `t${i}` } : t));
-  const board = cleanBoard({ title: l.title, tiers, pool: l.pool, items });
-  if (!board) throw new HttpError(400, 'Liste invalide');
-  if (!board.items.length) throw new HttpError(400, 'Ajoutez au moins une vignette avant de publier');
-  const used = new Set(board.items.map((i) => i.id));
-  for (const id of images.keys()) if (!used.has(id)) images.delete(id);
-  const author = typeof raw.author === 'string' ? raw.author.replace(/\s+/g, ' ').trim().slice(0, COMMUNITY.author) : '';
-  // Aperçu absent ou refusé : la carte retombe sur l'aperçu par vignettes (preview).
-  const thumb = decodeImage(raw.thumb, COMMUNITY.thumb);
-  return { author, board, images, thumb };
+/** Corps JSON du retrait ({ token }), construit par le Worker. */
+async function readToken(ctx: Ctx): Promise<unknown> {
+  const v: unknown = await ctx.request.json().catch(() => null);
+  return v && typeof v === 'object' ? (v as { token?: unknown }).token : undefined;
 }
 
 /** Colonnes title, author, search, board, preview, tiles, tiers (dans cet ordre). */
