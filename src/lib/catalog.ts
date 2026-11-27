@@ -5,8 +5,13 @@ import { apiGet } from './api';
 export { CATALOGS };
 export type { CatalogHit, CatalogId };
 
+/** `q` est normalisé (espaces, casse) pour que « Zelda » et « zelda  » partagent la même entrée de cache. */
 export const searchCatalog = async (source: CatalogId, q: string, signal?: AbortSignal): Promise<CatalogHit[]> =>
-  (await apiGet<CatalogHits>(`/catalog/${source}/search`, { q }, signal)).hits;
+  (await apiGet<CatalogHits>(
+    `/catalog/${source}/search`,
+    { q: q.trim().replace(/\s+/g, ' ').toLowerCase() },
+    signal,
+  )).hits;
 
 export const catalogList = async (source: CatalogId, list: string, signal?: AbortSignal): Promise<CatalogHit[]> =>
   (await apiGet<CatalogHits>(`/catalog/${source}/lists/${encodeURIComponent(list)}`, {}, signal)).hits;
