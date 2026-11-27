@@ -58,12 +58,13 @@ async function deezerGet<T>(pathOrUrl: string, params: Record<string, string | n
   url.protocol = 'https:';
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, String(v));
   for (let attempt = 0; ; attempt++) {
-    const d = await getJson<T | DzError>(url, { service: 'Deezer', host: HOST });
+    // Une erreur Deezer arrive en 200 et pourrait donc être en cache CDN : les réessais contournent le cache.
+    const d = await getJson<T | DzError>(url, { service: 'Deezer', host: HOST, fresh: attempt > 0 });
     if (d && typeof d === 'object' && 'error' in d) {
       const { code, message } = d.error;
       if (code === 4 && attempt < 3) {
-        // quota dépassé : la fenêtre est de 5 s
-        await sleep(2000);
+        // quota dépassé : la fenêtre est de 5 s (premier réessai immédiat, l'erreur venait peut-être du cache)
+        if (attempt > 0) await sleep(2000);
         continue;
       }
       if (code === 800) throw new HttpError(404, 'Introuvable sur Deezer');

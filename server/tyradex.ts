@@ -32,7 +32,12 @@ interface Mon {
 let cache: { at: number; mons: Promise<Mon[]> } | null = null;
 
 async function fetchPokedex(): Promise<Mon[]> {
-  const raw = await getJson<TxPokemon[]>(new URL(`https://${HOST}/api/v1/pokemon`), { service: 'Tyradex', host: HOST });
+  const raw = await getJson<TxPokemon[]>(new URL(`https://${HOST}/api/v1/pokemon`), {
+    service: 'Tyradex',
+    host: HOST,
+    // ~1,6 Mo rechargé à chaque nouvelle instance du Worker : le CDN le garde 6 h.
+    cacheTtl: 6 * 3600,
+  });
   if (!Array.isArray(raw)) throw new HttpError(502, 'Réponse Tyradex illisible');
   return raw
     .filter((p) => p.pokedex_id > 0) // 0 = MissingNo.

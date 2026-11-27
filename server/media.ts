@@ -1,4 +1,5 @@
 import { HttpError, type Route } from './api';
+import { edgeCache, type EdgeInit } from './http';
 
 /**
  * Relais d'images unique pour tous les services : même origine pour le navigateur (pas de souci CORS pour le canvas).
@@ -16,6 +17,8 @@ export interface ImageHost {
 const MAX_BYTES = 8_000_000;
 /** Certaines images passent par des redirections (Open Library → archive.org) : chaque étape est revérifiée. */
 const MAX_HOPS = 3;
+/** Cache CDN des images (30 jours, comme le Cache-Control renvoyé au navigateur). */
+const IMAGE_TTL = 2_592_000;
 
 export function isAllowed(u: URL, hosts: readonly ImageHost[]): boolean {
   if (u.protocol !== 'https:' || u.port) return false;
@@ -42,7 +45,8 @@ export function imageRoutes(hosts: readonly ImageHost[]): Route[] {
         for (let hop = 0; ; hop++) {
           if (!isAllowed(u, hosts)) throw new HttpError(400, 'Domaine d’image non autorisé');
           // redirect: 'manual' (les Workers refusent 'error') : on suit nous-mêmes pour vérifier chaque destination.
-          const r = await fetch(u, { redirect: 'manual' }).catch(() => null);
+          const init: EdgeInit = { redirect: 'manual', cf: edgeCache(IMAGE_TTL) };
+          const r = await fetch(u, init).catch(() => null);
           if (!r) throw new HttpError(502, 'Image indisponible');
           const loc = r.headers.get('Location');
           if (r.status >= 300 && r.status < 400 && loc && hop < MAX_HOPS) {
