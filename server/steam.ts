@@ -12,6 +12,20 @@ import { getJson } from './http';
 const HOST = 'store.steampowered.com';
 const CDN = 'https://shared.akamai.steamstatic.com/store_item_assets/steam/apps';
 const COVER_TIMEOUT = 1500;
+/** Nombre d'images retenues en mémoire : au-delà, les plus anciennes sont oubliées. */
+const COVER_MAX = 2000;
+
+/**
+ * Image retenue par jeu, pour ne pas revérifier un jeu qui revient d'une recherche à l'autre (« zel », « zeld »…).
+ * Cache propre à l'isolate (optimisation, pas une garantie) ; seules les réponses nettes du CDN y entrent.
+ */
+const covers = new Map<number, string>();
+
+function remember(id: number, url: string): string {
+  if (covers.size >= COVER_MAX) covers.delete(covers.keys().next().value as number);
+  covers.set(id, url);
+  return url;
+}
 
 interface SteamItem {
   type: string;
@@ -22,15 +36,19 @@ interface SteamItem {
 
 /** Jaquette verticale si elle existe, sinon bannière (toujours présente). */
 async function coverOf(id: number): Promise<string> {
+  const known = covers.get(id);
+  if (known) return known;
   const cover = `${CDN}/${id}/library_600x900.jpg`;
   try {
     // Délai court : une vérification lente ne doit pas retarder toute la recherche.
     const r = await fetch(cover, { method: 'HEAD', signal: AbortSignal.timeout(COVER_TIMEOUT) });
     // Libère la connexion tout de suite (le Worker limite les connexions sortantes simultanées).
     void r.body?.cancel().catch(() => {});
-    if (r.ok) return cover;
+    if (r.ok) return remember(id, cover);
+    // 404 : la jaquette n'existe pas, inutile de redemander. Une erreur 5xx ou 429 sera revérifiée.
+    if (r.status === 404 || r.status === 403) return remember(id, `${CDN}/${id}/header.jpg`);
   } catch {
-    // CDN injoignable ou trop lent : la bannière servira de repli
+    // CDN injoignable ou trop lent : la bannière sert de repli cette fois, sans être retenue
   }
   return `${CDN}/${id}/header.jpg`;
 }
