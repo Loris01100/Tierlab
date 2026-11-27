@@ -8,11 +8,13 @@ Tierlab is a tier-list maker: Svelte 5 (runes) + TypeScript SPA, data stored loc
 
 ```bash
 npm run dev      # Vite dev server on http://localhost:5173; /api runs in workerd via @cloudflare/vite-plugin
-npm run check    # svelte-check on src/ + shared/, then tsc on server/ + vite.config.ts (tsconfig.node.json)
+npm run check    # svelte-check --tsgo on src/ + shared/, then tsc on server/ + vite.config.ts (tsconfig.node.json)
 npm run build    # production build into dist/
 npm run preview  # serve the build (dist/client + dist/mainlist worker) with /api
 npm run deploy   # build + wrangler deploy (needs `npx wrangler login` once)
 ```
+
+TypeScript 7 (native, Go): `tsc` comes from `@typescript/native` (npm alias of `typescript@7`); `typescript@~6` stays installed because svelte-check and the Svelte/Vite tooling still need the JS API, svelte-check uses TS 7 through `--tsgo` (transpiled files in `.svelte-check/`, git-ignored). Upgrade both together.
 
 There is no test suite or linter; `npm run check` is the verification step.
 
