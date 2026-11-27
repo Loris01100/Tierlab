@@ -43,6 +43,7 @@ interface Cleaned {
   author: string;
   board: LiveBoard;
   images: Map<string, Image>;
+  thumb: Image | null;
 }
 
 const SCHEMA = [
@@ -56,7 +57,11 @@ const SCHEMA = [
   'CREATE TABLE IF NOT EXISTS mark (list TEXT NOT NULL, ip TEXT NOT NULL, kind TEXT NOT NULL, PRIMARY KEY (list, ip, kind))',
 ];
 
-const CARD_COLS = 'id, title, author, created, updated, tiles, tiers, copies, preview';
+/** Id réservé de l'image d'aperçu dans la table img : « ~ » est refusé par ID_RE, aucune vignette ne peut le prendre. */
+const THUMB = '~thumb';
+
+const CARD_COLS = `id, title, author, created, updated, tiles, tiers, copies, preview,
+  EXISTS (SELECT 1 FROM img WHERE img.list = list.id AND img.id = '${THUMB}') AS thumb`;
 
 /** Vérifie qu'une ligne de list (avec sa colonne reports) existe et n'est pas masquée, sinon 404. */
 function visibleRow(row: Record<string, unknown> | undefined): Record<string, unknown> {
@@ -79,7 +84,8 @@ export class Gallery {
         list: async (c) => this.#list(c),
         publish: (c) => this.#publish(c),
         get: async (c) => this.#get(c),
-        img: async (c) => this.#img(c),
+        img: async (c) => this.#image(c.params.id, ID_RE.test(c.params.item) ? c.params.item : null),
+        thumb: async (c) => this.#image(c.params.id, THUMB),
         copy: (c) => this.#copy(c),
         report: (c) => this.#report(c),
         update: (c) => this.#update(c),
@@ -124,16 +130,16 @@ export class Gallery {
     return { ...toCard(row), board: JSON.parse(String(row.board)) as LiveBoard };
   }
 
-  #img(ctx: Ctx): Response {
-    const { id, item } = ctx.params;
+  /** Image d'une liste visible : une vignette, ou l'aperçu (THUMB). item null = id invalide. */
+  #image(id: string, item: string | null): Response {
     // Une seule requête : la liste (visibilité) et l'image jointe, absente (NULL) si l'id ne correspond à rien.
     const row = visibleRow(
-      PUB_RE.test(id) && ID_RE.test(item)
+      PUB_RE.test(id) && item
         ? this.#rows('SELECT l.reports, i.type, i.data FROM list l LEFT JOIN img i ON i.list = l.id AND i.id = ? WHERE l.id = ?', item, id)[0]
         : undefined,
     );
     if (row.data == null) return json(404, { error: 'Image introuvable' });
-    // Une vignette est immuable (nouvel id à chaque modification) : cache long.
+    // Une vignette est immuable (nouvel id à chaque modification), l'aperçu est demandé avec ?v=<updated> : cache long.
     return new Response(row.data as ArrayBuffer, { headers: { 'Content-Type': String(row.type), 'Cache-Control': 'public, max-age=31536000, immutable' } });
   }
 
@@ -186,7 +192,7 @@ export class Gallery {
       tokenHash,
       ip,
     );
-    this.#putImages(id, data.images);
+    this.#putImages(id, data);
     return { id, token };
   }
 
@@ -196,7 +202,7 @@ export class Gallery {
     const data = cleanPublish(raw);
     this.#sql.exec('UPDATE list SET title = ?, author = ?, search = ?, board = ?, preview = ?, tiles = ?, tiers = ?, updated = ? WHERE id = ?', ...listColumns(data), Date.now(), id);
     this.#sql.exec('DELETE FROM img WHERE list = ?', id);
-    this.#putImages(id, data.images);
+    this.#putImages(id, data);
     return null;
   }
 
@@ -227,8 +233,10 @@ export class Gallery {
     return id;
   }
 
-  #putImages(id: string, images: Map<string, Image>) {
-    for (const [item, img] of images) this.#sql.exec('INSERT OR REPLACE INTO img (list, id, type, data) VALUES (?, ?, ?, ?)', id, item, img.type, img.data);
+  #putImages(id: string, { images, thumb }: Cleaned) {
+    const all: [string, Image][] = [...images];
+    if (thumb) all.push([THUMB, thumb]);
+    for (const [item, img] of all) this.#sql.exec('INSERT OR REPLACE INTO img (list, id, type, data) VALUES (?, ?, ?, ?)', id, item, img.type, img.data);
   }
 }
 
@@ -253,9 +261,9 @@ async function readBody(ctx: Ctx): Promise<Raw> {
 
 const IMG_SRC = /^data:(image\/(?:png|jpeg|webp|gif));base64,([A-Za-z0-9+/]+={0,2})$/;
 
-function decodeImage(src: unknown): Image | null {
+function decodeImage(src: unknown, max: number = COMMUNITY.image): Image | null {
   const m = typeof src === 'string' ? IMG_SRC.exec(src) : null;
-  if (!m || (m[2].length * 3) / 4 > COMMUNITY.image) return null;
+  if (!m || (m[2].length * 3) / 4 > max) return null;
   try {
     const bin = atob(m[2]);
     const data = new Uint8Array(bin.length);
@@ -305,7 +313,9 @@ function cleanPublish(raw: Raw): Cleaned {
   const used = new Set(board.items.map((i) => i.id));
   for (const id of images.keys()) if (!used.has(id)) images.delete(id);
   const author = typeof raw.author === 'string' ? raw.author.replace(/\s+/g, ' ').trim().slice(0, COMMUNITY.author) : '';
-  return { author, board, images };
+  // Aperçu absent ou refusé : la carte retombe sur l'aperçu par vignettes (preview).
+  const thumb = decodeImage(raw.thumb, COMMUNITY.thumb);
+  return { author, board, images, thumb };
 }
 
 /** Colonnes title, author, search, board, preview, tiles, tiers (dans cet ordre). */
@@ -333,6 +343,7 @@ function toCard(r: Record<string, unknown>): CommunityCard {
     tiles: Number(r.tiles),
     tiers: Number(r.tiers),
     copies: Number(r.copies),
+    thumb: Number(r.thumb) === 1,
     preview: JSON.parse(String(r.preview)) as PreviewTier[],
   };
 }

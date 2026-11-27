@@ -26,6 +26,10 @@ export const COMMUNITY = {
   /** Aperçu d'une carte : rangs et vignettes par rang. */
   previewTiers: 5,
   previewItems: 8,
+  /** Image d'aperçu dessinée par le navigateur à la publication : dimensions (px) et taille maximale (octets). */
+  thumbW: 480,
+  thumbH: 284,
+  thumb: 200 * 1024,
 } as const;
 
 export const PUB_RE = /^[a-z0-9]{16}$/;
@@ -55,6 +59,11 @@ export interface CommunityCard {
   tiles: number;
   tiers: number;
   copies: number;
+  /**
+   * Vrai si la liste a une image d'aperçu (/api/community/:id/thumb?v=<updated>) : une seule requête par carte.
+   * Les listes publiées avant son ajout n'en ont pas et s'affichent avec preview.
+   */
+  thumb: boolean;
   preview: PreviewTier[];
 }
 
@@ -86,6 +95,8 @@ export interface PubItem {
 export interface PublishBody {
   token?: string;
   author: string;
+  /** Aperçu de la carte de la galerie (WebP ou PNG en data URL, COMMUNITY.thumbW × thumbH). */
+  thumb?: string;
   list: {
     v: 1;
     title: string;

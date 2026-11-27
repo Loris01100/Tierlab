@@ -1,7 +1,7 @@
 <script lang="ts">
-  import type { CommunityCard, CommunitySort } from '../../shared/community';
+  import { COMMUNITY, type CommunityCard, type CommunitySort } from '../../shared/community';
   import { ApiError } from '../lib/api';
-  import { communityImageUrl, fetchCommunityPage, ownerOf } from '../lib/community.svelte';
+  import { communityImageUrl, communityThumbUrl, fetchCommunityPage, ownerOf } from '../lib/community.svelte';
   import { communityPath } from '../lib/router.svelte';
   import { plural, relativeTime } from '../lib/utils';
 
@@ -86,18 +86,22 @@
     {#each cards as c (c.id)}
       <li class="lcard">
         <a class="lopen" href="#{communityPath(c.id)}" aria-label="Voir {c.title}">
-          <span class="mini" aria-hidden="true">
-            {#each c.preview as t, i (i)}
-              <span class="mrow">
-                <i style:--c={t.color}>{t.name.slice(0, 3)}</i>
-                <span class="mtiles">
-                  {#each t.items as it (it.id)}
-                    {#if it.type === 'img'}<img src={communityImageUrl(c.id, it.id)} alt="" loading="lazy" />{:else}<b style:--c={it.bg}></b>{/if}
-                  {/each}
+          {#if c.thumb}
+            <img class="mthumb" src={communityThumbUrl(c)} alt="" width={COMMUNITY.thumbW} height={COMMUNITY.thumbH} loading="lazy" />
+          {:else}
+            <span class="mini" aria-hidden="true">
+              {#each c.preview as t, i (i)}
+                <span class="mrow">
+                  <i style:--c={t.color}>{t.name.slice(0, 3)}</i>
+                  <span class="mtiles">
+                    {#each t.items as it (it.id)}
+                      {#if it.type === 'img'}<img src={communityImageUrl(c.id, it.id)} alt="" loading="lazy" />{:else}<b style:--c={it.bg}></b>{/if}
+                    {/each}
+                  </span>
                 </span>
-              </span>
-            {/each}
-          </span>
+              {/each}
+            </span>
+          {/if}
         </a>
         <div class="lbody">
           <div class="ltxt">

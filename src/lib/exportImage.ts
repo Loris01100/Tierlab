@@ -1,4 +1,5 @@
 import type { Item, Tier } from './types';
+import { COMMUNITY } from '../../shared/community';
 import { fgFor } from './utils';
 
 /** Rendu de la tier liste dans un canvas PNG (indépendant du DOM). */
@@ -134,4 +135,66 @@ export async function renderTierList(title: string, tiers: Tier[], items: Record
     y += h + M;
   }
   return c;
+}
+
+/**
+ * Aperçu d'une carte de la galerie (COMMUNITY.thumbW × thumbH, deux fois la taille affichée) : les premiers rangs
+ * et leurs premières vignettes, comme l'aperçu en mini-rangs. Fond transparent et cases en gris translucide pour
+ * rester lisible en thème clair comme sombre. Une seule image par carte au lieu d'une requête par vignette.
+ * null si le navigateur ne sait pas l'encoder ou si elle dépasse COMMUNITY.thumb.
+ */
+export async function renderThumb(tiers: Tier[], items: Record<string, Item>): Promise<Blob | null> {
+  try {
+    await document.fonts.ready;
+  } catch {
+    /* ignoré */
+  }
+  const { thumbW: W, thumbH: H, previewTiers: N, previewItems: K } = COMMUNITY;
+  const G = 6, LW = 60, P = 6;
+  const rh = (H - G * (N - 1)) / N;
+  const s = rh - P * 2;
+  const c = document.createElement('canvas');
+  c.width = W;
+  c.height = H;
+  const x = c.getContext('2d')!;
+  const box = (bx: number, by: number, w: number, h: number, r: number) => {
+    x.beginPath();
+    if (x.roundRect) x.roundRect(bx, by, w, h, r);
+    else x.rect(bx, by, w, h);
+  };
+  for (const [i, t] of tiers.slice(0, N).entries()) {
+    const y = i * (rh + G);
+    box(0, y, LW, rh, 10);
+    x.fillStyle = t.color;
+    x.fill();
+    x.font = '800 24px Rubik, sans-serif';
+    x.fillStyle = fgFor(t.color);
+    x.textAlign = 'center';
+    x.textBaseline = 'middle';
+    x.fillText(t.name.slice(0, 3), LW / 2, y + rh / 2, LW - 8);
+    box(LW + 8, y, W - LW - 8, rh, 10);
+    x.fillStyle = 'rgba(128, 132, 145, 0.18)';
+    x.fill();
+    const ids = t.items.slice(0, K);
+    const ims = await Promise.all(ids.map((id) => decodeImage(items[id])));
+    ids.forEach((id, j) => {
+      const it = items[id];
+      const im = ims[j];
+      if (!it) return;
+      const tx = LW + 8 + P + j * (s + P);
+      x.save();
+      box(tx, y + P, s, s, 6);
+      x.clip();
+      x.fillStyle = it.type === 'text' ? (it.bg ?? '#3d5afe') : 'rgba(128, 132, 145, 0.45)';
+      x.fillRect(tx, y + P, s, s);
+      if (im) {
+        const k = Math.max(s / im.width, s / im.height);
+        x.drawImage(im, tx + (s - im.width * k) / 2, y + P + (s - im.height * k) / 2, im.width * k, im.height * k);
+        im.close();
+      }
+      x.restore();
+    });
+  }
+  const blob = await new Promise<Blob | null>((ok) => c.toBlob(ok, 'image/webp', 0.82));
+  return blob && blob.size <= COMMUNITY.thumb ? blob : null;
 }

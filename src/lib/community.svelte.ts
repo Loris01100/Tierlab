@@ -1,6 +1,8 @@
-import { COMMUNITY, type CommunityList, type CommunityPage, type CommunitySort, type Published, type PublishBody } from '../../shared/community';
+import { COMMUNITY, type CommunityCard, type CommunityList, type CommunityPage, type CommunitySort, type Published, type PublishBody } from '../../shared/community';
 import { ApiError, apiGet, apiPost, apiUrl, RawJson } from './api';
 import type { Editor } from './editor.svelte';
+import { renderThumb } from './exportImage';
+import { blobToDataURL } from './images';
 import { saveShared, toShared } from './share';
 import { getPref, setPref } from './utils';
 
@@ -21,10 +23,17 @@ export const ownerOf = (pubId: string): string | undefined => Object.keys(publis
 
 export const communityImageUrl = (id: string, item: string): string => apiUrl(`/community/${id}/img/${item}`);
 
+/** Aperçu de la carte ; ?v= change à chaque mise à jour, l'image peut donc rester en cache longtemps. */
+export const communityThumbUrl = (c: CommunityCard): string => apiUrl(`/community/${c.id}/thumb`, { v: c.updated });
+
 /** Corps de publication sérialisé une seule fois : la même chaîne sert au contrôle de taille et à l'envoi. */
 async function publishBody(ed: Editor, author: string, token?: string): Promise<RawJson> {
-  const list = await toShared({ title: ed.title, tiers: ed.tiers, pool: ed.pool, items: ed.items });
-  const text = JSON.stringify({ author: author.trim(), list, ...(token ? { token } : {}) } satisfies PublishBody);
+  const [list, thumb] = await Promise.all([
+    toShared({ title: ed.title, tiers: ed.tiers, pool: ed.pool, items: ed.items }),
+    // Aperçu facultatif : en cas d'échec, la galerie affiche les mini-rangs.
+    renderThumb(ed.tiers, ed.items).then((b) => (b ? blobToDataURL(b) : undefined)).catch(() => undefined),
+  ]);
+  const text = JSON.stringify({ author: author.trim(), list, ...(thumb ? { thumb } : {}), ...(token ? { token } : {}) } satisfies PublishBody);
   if (text.length > COMMUNITY.body) throw new ApiError(413, 'Liste trop lourde pour être publiée (trop d’images)');
   return new RawJson(text);
 }
