@@ -1,10 +1,13 @@
 import { COMMUNITY, type CommunityCard, type CommunityList, type CommunityPage, type CommunitySort, type Published, type PublishBody } from '../../shared/community';
-import { ApiError, apiGet, apiPost, apiUrl, RawJson } from './api';
+import { ApiError, apiGet, apiPost, apiUrl, mapLimit, RawJson } from './api';
+import { saveList } from './db';
 import type { Editor } from './editor.svelte';
 import { renderThumb } from './exportImage';
 import { blobToDataURL } from './images';
-import { saveShared, toShared } from './share';
-import { getPref, setPref } from './utils';
+import { toShared } from './share';
+import { toast } from './toast.svelte';
+import type { Item } from './types';
+import { fgFor, getPref, plural, setPref, uid } from './utils';
 
 /**
  * Galerie communautaire (serveur : server/gallery.ts). Publier envoie une copie figée de la liste ouverte ;
@@ -69,11 +72,52 @@ export const fetchCommunityPage = (q: string, sort: CommunitySort, page: number,
 
 export const fetchCommunityList = (id: string, signal?: AbortSignal): Promise<CommunityList> => apiGet<CommunityList>(`/community/${id}`, undefined, signal);
 
-/** « Faire ma version » : copie la liste publiée dans la bibliothèque locale ; renvoie l'id de la nouvelle liste. */
-export async function copyList(id: string): Promise<string> {
-  const raw = await apiPost<unknown>(`/community/${id}/copy`, {});
-  const listId = await saveShared(raw);
-  if (!listId) throw new ApiError(0, 'Liste reçue illisible');
+/**
+ * « Faire ma version » : copie la liste publiée dans la bibliothèque locale ; renvoie l'id de la nouvelle liste.
+ * La liste vient de la page déjà affichée et ses images de communityImageUrl, donc du cache du navigateur :
+ * le serveur ne fait que compter la copie (et vérifier que la liste est toujours visible).
+ */
+export async function copyList(data: CommunityList): Promise<string> {
+  const listId = uid();
+  const imgs = data.board.items.filter((i) => i.type === 'img');
+  const [blobs] = await Promise.all([
+    mapLimit(imgs, 4, async (it) => {
+      const r = await fetch(communityImageUrl(data.id, it.id)).catch(() => null);
+      return r?.ok ? r.blob() : null;
+    }),
+    apiPost(`/community/${data.id}/copy`, {}),
+  ]);
+  const blobOf = new Map(imgs.map((it, i) => [it.id, blobs[i]]));
+  // Nouveaux ids partout : la même liste peut être copiée plusieurs fois.
+  const ids = new Map<string, string>();
+  const items: Item[] = [];
+  for (const it of data.board.items) {
+    const id = uid();
+    if (it.type === 'img') {
+      const blob = blobOf.get(it.id);
+      if (!blob) continue;
+      items.push({ id, listId, type: 'img', text: it.text, blob });
+    } else {
+      const bg = it.bg ?? '#3d5afe';
+      items.push({ id, listId, type: 'text', text: it.text, bg, fg: fgFor(bg) });
+    }
+    ids.set(it.id, id);
+  }
+  const remap = (a: string[]): string[] => a.flatMap((k) => ids.get(k) ?? []);
+  const now = Date.now();
+  await saveList(
+    {
+      id: listId,
+      title: data.board.title || 'Tier liste importée',
+      tiers: data.board.tiers.map((t) => ({ id: uid(), name: t.name, color: t.color, items: remap(t.items) })),
+      pool: remap(data.board.pool),
+      createdAt: now,
+      updatedAt: now,
+    },
+    items,
+  );
+  const failed = imgs.length - imgs.filter((it) => blobOf.get(it.id)).length;
+  if (failed) toast(`${plural(failed, 'image')} non récupérée${failed > 1 ? 's' : ''}`);
   return listId;
 }
 

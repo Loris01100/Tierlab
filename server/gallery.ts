@@ -8,8 +8,6 @@ import {
   type CommunityList,
   type CommunityPage,
   type PreviewTier,
-  type PubItem,
-  type PublishBody,
   type Published,
 } from '../shared/community';
 import { cleanBoard, cleanItem, ID_RE, LIVE, type LiveBoard, type LiveItem } from '../shared/live';
@@ -143,30 +141,17 @@ export class Gallery {
     return new Response(row.data as ArrayBuffer, { headers: { 'Content-Type': String(row.type), 'Cache-Control': 'public, max-age=31536000, immutable' } });
   }
 
-  /** « Faire ma version » : la liste au format d'échange, images en data URL. Compte une copie par adresse. */
-  async #copy(ctx: Ctx): Promise<PublishBody['list']> {
+  /**
+   * « Faire ma version » : compte une copie par adresse. Le navigateur construit la copie lui-même avec la liste déjà
+   * affichée et ses images (déjà en cache) : rien à relire ni à réencoder ici, la galerie n'est pas bloquée.
+   */
+  async #copy(ctx: Ctx): Promise<null> {
     const { id } = ctx.params;
-    const row = this.#visible(id, 'board');
-    const board = JSON.parse(String(row.board)) as LiveBoard;
+    this.#visible(id, 'id');
     const ip = await ipHash(ctx.request);
     if (this.#sql.exec("INSERT OR IGNORE INTO mark (list, ip, kind) VALUES (?, ?, 'copy')", id, ip).rowsWritten)
       this.#sql.exec('UPDATE list SET copies = copies + 1 WHERE id = ?', id);
-    const images = new Map(this.#rows('SELECT id, type, data FROM img WHERE list = ?', id).map((r) => [String(r.id), r]));
-    const items: Record<string, PubItem> = {};
-    for (const it of board.items) {
-      if (it.type === 'text') items[it.id] = { type: 'text', text: it.text, bg: it.bg };
-      else {
-        const img = images.get(it.id);
-        if (img) items[it.id] = { type: 'img', text: it.text, src: `data:${String(img.type)};base64,${toBase64(new Uint8Array(img.data as ArrayBuffer))}` };
-      }
-    }
-    return {
-      v: 1,
-      title: board.title,
-      tiers: board.tiers.map((t) => ({ name: t.name, color: t.color, items: t.items })),
-      pool: board.pool,
-      items,
-    };
+    return null;
   }
 
   /* ---------- écriture ---------- */
@@ -281,12 +266,6 @@ function isImage(type: string, d: Uint8Array): boolean {
   if (type === 'image/jpeg') return at(0, 0xff, 0xd8, 0xff);
   if (type === 'image/gif') return at(0, 0x47, 0x49, 0x46, 0x38);
   return at(0, 0x52, 0x49, 0x46, 0x46) && at(8, 0x57, 0x45, 0x42, 0x50);
-}
-
-function toBase64(bytes: Uint8Array): string {
-  let s = '';
-  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-  return btoa(s);
 }
 
 /** Valide un corps de publication (données non fiables) : liste au format d'échange + pseudo. */

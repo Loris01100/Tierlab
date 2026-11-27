@@ -35,9 +35,10 @@
   const own = $derived(ownerOf(id));
 
   async function copy() {
+    if (!data) return;
     busy = true;
     try {
-      const listId = await copyList(id);
+      const listId = await copyList(data);
       toast('Copie ajoutée à vos listes');
       go(listPath(listId));
     } catch (e) {
